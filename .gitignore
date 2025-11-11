@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.bunbox/
+
+# Build output
+dist/
+build/
+*.log
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Bun
+bun.lockb
+
+# Test coverage
+coverage/
+
+# Misc
+*.tmp
+*.temp

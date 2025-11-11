@@ -1,0 +1,30 @@
+# Example/demo application (not part of the framework)
+app/
+ws/
+index.ts
+
+# Development files
+*.log
+*.swp
+.DS_Store
+.vscode/
+.idea/
+.cursor/
+
+# Build artifacts
+dist/
+*.tgz
+
+# Git
+.git/
+.gitignore
+
+# Tests (if you add them)
+test/
+tests/
+*.test.ts
+*.spec.ts
+
+# CI/CD
+.github/
+
