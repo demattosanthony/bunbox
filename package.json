@@ -1,5 +1,5 @@
 {
-  "name": "bunbox",
+  "name": "@ademattos/bunbox",
   "version": "0.1.0",
   "description": "A simple full-stack framework built on Bun - 100x simpler than Next.js",
   "author": "Anthony Demattos <demattosanthony@gmail.com>",
@@ -34,9 +34,7 @@
   "scripts": {
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
-    "build": "bun build src/index.ts --outdir dist --target bun",
-    "test": "bun test",
-    "prepublishOnly": "bun test"
+    "build": "bun build src/index.ts --outdir dist --target bun"
   },
   "keywords": [
     "bun",
