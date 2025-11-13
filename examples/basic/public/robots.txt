@@ -1,0 +1,4 @@
+# Bunbox Public Directory Example
+User-agent: *
+Allow: /
+
