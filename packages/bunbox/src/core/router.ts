@@ -5,34 +5,50 @@
 import type { Route, RouteMatch } from "./types";
 
 /**
+ * Route type transformation configuration
+ */
+const ROUTE_TRANSFORMS: Record<
+  "page" | "api" | "ws" | "socket",
+  { prefix: RegExp; replacement: string; suffix: RegExp }
+> = {
+  page: {
+    prefix: /^app/,
+    replacement: "",
+    suffix: /\/page\.(tsx|ts|jsx|js)$/,
+  },
+  api: {
+    prefix: /^app/,
+    replacement: "",
+    suffix: /\/route\.(tsx|ts|jsx|js)$/,
+  },
+  ws: {
+    prefix: /^ws/,
+    replacement: "/ws",
+    suffix: /\/route\.(tsx|ts|jsx|js)$/,
+  },
+  socket: {
+    prefix: /^sockets/,
+    replacement: "/sockets",
+    suffix: /\/route\.(tsx|ts|jsx|js)$/,
+  },
+};
+
+/**
  * Transform file path to route path based on type
  */
 function transformFilePath(
   filePath: string,
   type: "page" | "api" | "ws" | "socket"
 ): string {
-  if (type === "page") {
-    // Handle root page.tsx -> ""
-    if (filePath.match(/^page\.(tsx|ts|jsx|js)$/)) {
-      return "";
-    }
-    // Handle nested pages: about/page.tsx -> /about
-    return filePath.replace(/^app/, "").replace(/\/page\.(tsx|ts|jsx|js)$/, "");
+  // Special case for root page
+  if (type === "page" && filePath.match(/^page\.(tsx|ts|jsx|js)$/)) {
+    return "";
   }
-  if (type === "api") {
-    return filePath
-      .replace(/^app/, "")
-      .replace(/\/route\.(tsx|ts|jsx|js)$/, "");
-  }
-  if (type === "ws") {
-    return filePath
-      .replace(/^ws/, "/ws")
-      .replace(/\/route\.(tsx|ts|jsx|js)$/, "");
-  }
-  // type === "socket"
+
+  const transform = ROUTE_TRANSFORMS[type];
   return filePath
-    .replace(/^sockets/, "/sockets")
-    .replace(/\/route\.(tsx|ts|jsx|js)$/, "");
+    .replace(transform.prefix, transform.replacement)
+    .replace(transform.suffix, "");
 }
 
 /**

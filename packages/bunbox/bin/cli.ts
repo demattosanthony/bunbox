@@ -67,13 +67,14 @@ if (command === "build") {
 const development = command === "dev";
 const config = await resolveConfig(cliConfig, development);
 
-// Build server config first to detect worker-only mode
-const serverConfig = await buildServerConfig(config);
-
-// Print header
+// Print header first
 console.log("");
 console.log("   📦 Bunbox");
 
+// Build server config (this will initialize and determine worker-only mode)
+const serverConfig = await buildServerConfig(config);
+
+// Print mode-specific info
 if (serverConfig.workerOnly) {
   console.log("   - Mode:    Worker");
 } else {
@@ -82,6 +83,9 @@ if (serverConfig.workerOnly) {
 
 console.log("");
 console.log(" ○ Starting...");
+
+// Print ready message after initialization
+console.log(serverConfig.readyMessage);
 
 // Start server or keep process alive for worker-only mode
 if (serverConfig.workerOnly) {
@@ -107,7 +111,7 @@ if (serverConfig.workerOnly) {
   // This MUST be at top level for Bun's --hot to work properly
   const server = Bun.serve(serverConfig);
 
-  // Start worker after server is listening (production only)
+  // Start worker after server is listening (both dev and production)
   // Bun.serve() returns synchronously once the server is listening
   if (serverConfig.startWorkerAfterListen) {
     await serverConfig.startWorkerAfterListen();

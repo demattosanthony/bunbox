@@ -6,11 +6,13 @@ A minimal full-stack framework for Bun. Create files in `app/` and they become r
 
 - **File-based routing**: `app/about/page.tsx` → `/about`
 - **Server-side rendering**: React components render on the server
-- **API routes**: Export HTTP methods from `route.ts` files
-- **Socket servers**: Type-safe real-time communication with protocols
+- **API routes**: Ultra-minimal with full type safety
+- **Typed API client**: Auto-generated, fully typed (params, query, body, response)
+- **Socket servers**: Type-safe real-time communication
 - **Workers**: Background tasks and long-running processes
 - **TypeScript**: Full type safety, zero config
 - **Fast**: Powered by Bun's native HTTP server
+- **Tiny**: Only 2,449 lines of core code
 
 ## 🚀 Quick Start
 
@@ -67,77 +69,152 @@ export default function Home() {
 }
 
 // app/blog/[slug]/page.tsx
-import type { PageProps } from "bunbox";
+import type { PageProps } from "@ademattos/bunbox";
 
 export default function BlogPost({ params, query }: PageProps) {
   return <h1>Post: {params.slug}</h1>;
 }
 ```
 
-## APIs
+## API Routes
 
-Bunbox provides a powerful typed API system with schema validation and automatic client generation.
+Bunbox provides an ultra-minimal API with full type safety and auto-generated typed client.
 
-### Basic API Routes
+### Simple API Route
 
-Export HTTP methods from `route.ts` files:
-
-```tsx
+```typescript
 // app/api/hello/route.ts
-import { defineRoute, schema } from "bunbox";
+import { api } from "@ademattos/bunbox";
 
-// Define schemas for type safety
-const responseSchema = schema.object({
-  message: schema.string(),
-});
+export const GET = api((req) => ({
+  message: "Hello World",
+  timestamp: new Date().toISOString(),
+}));
+```
 
-export const GET = defineRoute({
-  response: responseSchema,
-  handler: async () => {
-    return { message: "Hello" };
+That's it! 3 lines for a fully typed endpoint.
+
+### With Type Parameters (Optional)
+
+For even better type safety, specify types for params, query, body, and response:
+
+```typescript
+// app/api/users/route.ts
+import { api } from "@ademattos/bunbox";
+
+// Full type safety: api<Params, Query, Body, Response>
+export const POST = api<
+  any,
+  any,
+  { name: string; email: string }, // Body type
+  { id: string; name: string; email: string } // Response type
+>((req) => ({
+  id: Math.random().toString(36).substring(7),
+  name: req.body.name,
+  email: req.body.email,
+}));
+
+export const GET = api<
+  { id: string }, // Params type
+  any,
+  any,
+  { id: string; name: string }
+>((req) => ({
+  id: req.params.id,
+  name: "John Doe",
+}));
+```
+
+### Auto-Generated Typed Client
+
+Bunbox automatically generates a fully typed API client:
+
+```typescript
+import { api } from "./.bunbox/api-client";
+
+// TypeScript knows all types!
+const user = await api.users.POST({
+  body: {
+    name: "Alice",
+    email: "alice@example.com",
   },
 });
+
+console.log(user.id); // ✅ TypeScript knows: string
+console.log(user.name); // ✅ TypeScript knows: string
+console.log(user.email); // ✅ TypeScript knows: string
+
+// ❌ TypeScript errors on wrong types
+await api.users.POST({
+  body: { name: 123 }, // Error: number not assignable to string
+});
+
+// Query params, path params - all typed
+const result = await api.users.GET({
+  params: { id: "123" },
+  query: { filter: "active" },
+});
 ```
 
-### Typed Routes with Validation
+### With Route Parameters
 
-```tsx
+```typescript
 // app/api/users/[id]/route.ts
-import type { BunboxRequest } from "bunbox";
+import { api, type BunboxRequest } from "@ademattos/bunbox";
 
-export async function GET(req: BunboxRequest) {
-  // Access route parameters
+export const GET = api((req: BunboxRequest) => {
   const { id } = req.params;
+  return { id, name: "User " + id };
+});
 
-  // Access query parameters
-  const { filter } = req.query;
+export const DELETE = api((req: BunboxRequest) => {
+  const { id } = req.params;
+  return { deleted: true, id };
+});
+```
 
-  return new Response(JSON.stringify({ id, filter }), {
-    headers: { "Content-Type": "application/json" },
-  });
-}
+### Response Helpers
 
+```typescript
+import { api, json, error } from "@ademattos/bunbox";
+
+// json() helper
+export const GET = api((req) => {
+  return { data: "hello" }; // Automatically wrapped with json()
+});
+
+// Manual Response for custom headers/status
 export async function POST(req: BunboxRequest) {
-  const { id } = req.params;
-
-  // Body is automatically parsed based on Content-Type
-  const { name, email } = req.body;
-
-  return new Response(JSON.stringify({ id, name, email }), {
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 201,
     headers: { "Content-Type": "application/json" },
   });
 }
 ```
 
-Available methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`
+### Validation
 
-**Request body parsing:**
+Bunbox doesn't include validation - use Zod, Yup, or any library you prefer:
 
-- JSON: `application/json` → parsed object
-- Form data: `application/x-www-form-urlencoded` → parsed object
-- Multipart: `multipart/form-data` → parsed object
-- Text: `text/*` → raw string
-- Other: attempts JSON parse, falls back to text
+```typescript
+import { api } from "@ademattos/bunbox";
+import { z } from "zod";
+
+const userSchema = z.object({
+  name: z.string().min(3),
+  email: z.string().email(),
+});
+
+export const POST = api(async (req) => {
+  // Validate with Zod
+  const data = userSchema.parse(req.body);
+
+  return {
+    id: "123",
+    ...data,
+  };
+});
+```
 
 ## Socket Servers
 
@@ -147,7 +224,7 @@ Socket servers provide type-safe, structured real-time communication.
 
 ```typescript
 // app/sockets/chat/protocol.ts
-import { defineProtocol } from "bunbox";
+import { defineProtocol } from "@ademattos/bunbox";
 
 export const ChatProtocol = defineProtocol({
   "chat-message": { text: "", username: "" },
@@ -160,10 +237,17 @@ export const ChatProtocol = defineProtocol({
 
 ```typescript
 // app/sockets/chat/route.ts
-import type { SocketUser, SocketContext, SocketMessage } from "bunbox";
+import type {
+  SocketUser,
+  SocketContext,
+  SocketMessage,
+} from "@ademattos/bunbox";
 
 export function onJoin(user: SocketUser, ctx: SocketContext) {
-  ctx.broadcast("user-joined", { username: user.data.username });
+  // user.data is fully generic - pass any data you need
+  ctx.broadcast("user-joined", {
+    username: user.data.username || user.id,
+  });
 }
 
 export function onMessage(
@@ -174,20 +258,31 @@ export function onMessage(
   if (message.type === "chat-message") {
     ctx.broadcast("chat-message", {
       text: message.data.text,
-      username: user.data.username,
+      username: user.data.username || user.id,
     });
   }
 }
 
 export function onLeave(user: SocketUser, ctx: SocketContext) {
-  ctx.broadcast("user-left", { username: user.data.username });
+  ctx.broadcast("user-left", {
+    username: user.data.username || user.id,
+  });
+}
+
+// Optional: Authorize connections
+export function onAuthorize(
+  req: Request,
+  userData: Record<string, any>
+): boolean {
+  // Validate user data before allowing connection
+  return true;
 }
 ```
 
 ### 3. Connect from React
 
 ```tsx
-import { useSocket } from "bunbox/client";
+import { useSocket } from "@ademattos/bunbox/client";
 import { ChatProtocol } from "./app/sockets/chat/protocol";
 
 function Chat() {
@@ -216,7 +311,7 @@ function Chat() {
 ### Socket Client (Vanilla JS)
 
 ```typescript
-import { SocketClient } from "bunbox/client";
+import { SocketClient } from "@ademattos/bunbox/client";
 import { ChatProtocol } from "./app/sockets/chat/protocol";
 
 const client = new SocketClient("/sockets/chat", ChatProtocol, {
@@ -236,7 +331,7 @@ Workers run background tasks. Create `app/worker.ts`:
 
 ```typescript
 // app/worker.ts
-import { SocketClient } from "bunbox/client";
+import { SocketClient } from "@ademattos/bunbox/client";
 import { ChatProtocol } from "./sockets/chat/protocol";
 
 export default async function worker() {
@@ -300,6 +395,28 @@ See `examples/basic/` for a complete example app.
 cd examples/basic
 bun dev
 ```
+
+## Why Bunbox?
+
+- **Minimal**: Only 2,449 lines of core code
+- **Typed**: Fully typed API client with params, query, body, response
+- **Fast**: Built on Bun's native HTTP server
+- **Simple**: `export const GET = api((req) => ({ ... }))` - that's it
+- **Flexible**: Bring your own validation library (Zod, Yup, etc.)
+- **Zero config**: Works out of the box
+
+## Philosophy
+
+> "The best code is deleted code"
+
+Bunbox gives you:
+
+- File-based routing (like Next.js)
+- Typed API client (like tRPC, but simpler)
+- Real-time sockets (like Socket.io, but type-safe)
+- All in a tiny, hackable codebase
+
+No magic. No vendor lock-in. Just TypeScript and Bun.
 
 ## License
 

@@ -8,14 +8,50 @@ import { mkdir } from "node:fs/promises";
 import { scanPageRoutes, scanLayouts, scanApiRoutes } from "./scanner";
 import { routePathToUrl, toBunRoutePath } from "./router";
 import { checkUseServer } from "./ssr";
-import { dynamicImport, resolveAbsolutePath, getBunboxDir } from "./utils";
+import { dynamicImport, resolveAbsolutePath } from "./utils";
+import {
+  buildApiObject,
+  generateTypeAliases,
+  HTTP_METHODS,
+} from "./generator/type-helpers";
+import type {
+  ApiRouteTreeNode,
+  ApiRouteMethodMeta,
+} from "./generator/type-helpers";
 import type { ApiRouteModule } from "./types";
+import type { ResolvedBunboxConfig } from "./config";
+
+function createRouteTreeNode(): ApiRouteTreeNode {
+  return {
+    children: new Map(),
+    methods: [],
+  };
+}
+
+function insertRouteMethod(
+  node: ApiRouteTreeNode,
+  segments: string[],
+  meta: ApiRouteMethodMeta
+): void {
+  let current = node;
+
+  for (const segment of segments) {
+    if (!current.children.has(segment)) {
+      current.children.set(segment, createRouteTreeNode());
+    }
+    current = current.children.get(segment)!;
+  }
+
+  current.methods.push(meta);
+}
 
 /**
  * Generate routes file for client-side hydration
  */
 export async function generateRoutesFile(appDir: string): Promise<string> {
-  const pageRoutes = await scanPageRoutes(appDir);
+  const pageRoutes = (await scanPageRoutes(appDir)).sort((a, b) =>
+    a.filepath.localeCompare(b.filepath)
+  );
   const layouts = await scanLayouts(appDir);
 
   const imports: string[] = [];
@@ -23,32 +59,42 @@ export async function generateRoutesFile(appDir: string): Promise<string> {
   const layoutExports: string[] = [];
   const ssrPages: string[] = [];
 
-  let importCounter = 0;
+  const pageEntries = await Promise.all(
+    pageRoutes.map(async (route, index) => {
+      const routePath = routePathToUrl(route.filepath);
+      const importName = `Page${index}`;
+      const requiresSSR = await checkUseServer(join(appDir, route.filepath));
 
-  // Generate page imports and detect SSR pages
-  for (const route of pageRoutes) {
-    const importName = `Page${importCounter++}`;
-    const routePath = routePathToUrl(route.filepath);
+      return {
+        importName,
+        routePath,
+        filepath: route.filepath,
+        requiresSSR,
+      };
+    })
+  );
 
-    imports.push(`import ${importName} from "../app/${route.filepath}";`);
-    routeExports.push(`  "${routePath}": ${importName}`);
-
-    // Check if this page has "use server"
-    const pagePath = join(appDir, route.filepath);
-    if (await checkUseServer(pagePath)) {
-      ssrPages.push(`  "${routePath}"`);
+  for (const entry of pageEntries) {
+    imports.push(`import ${entry.importName} from "../app/${entry.filepath}";`);
+    routeExports.push(`  "${entry.routePath}": ${entry.importName}`);
+    if (entry.requiresSSR) {
+      ssrPages.push(`  "${entry.routePath}"`);
     }
   }
 
-  // Generate layout imports
-  for (const [routePath, layoutFile] of layouts.entries()) {
-    const importName = `Layout${importCounter++}`;
+  const sortedLayouts = Array.from(layouts.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
+
+  let layoutCounter = pageEntries.length;
+  for (const [routePath, layoutFile] of sortedLayouts) {
+    const importName = `Layout${layoutCounter++}`;
     imports.push(`import ${importName} from "../app/${layoutFile}";`);
     layoutExports.push(`  "${routePath}": ${importName}`);
   }
 
   // Write routes file
-  const bunboxDir = getBunboxDir();
+  const bunboxDir = join(process.cwd(), ".bunbox");
   await mkdir(bunboxDir, { recursive: true });
 
   const routesContent = `/**
@@ -99,15 +145,18 @@ initBunbox(routes, layouts, ssrPages).catch((error) => {
 /**
  * Generate typed API client for all API routes
  */
-export async function generateApiClient(appDir: string): Promise<void> {
-  const apiRoutes = await scanApiRoutes(appDir);
-  const bunboxDir = getBunboxDir();
+export async function generateApiClient(
+  appDir: string,
+  config?: ResolvedBunboxConfig
+): Promise<void> {
+  const apiRoutes = (await scanApiRoutes(appDir)).sort((a, b) =>
+    a.filepath.localeCompare(b.filepath)
+  );
+  const bunboxDir = join(process.cwd(), ".bunbox");
   await mkdir(bunboxDir, { recursive: true });
 
-  const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
-
   // Scan routes and build client structure
-  const routeTree: Record<string, any> = {};
+  const routeTree = createRouteTreeNode();
   const typeImports: string[] = [];
   let importCounter = 0;
 
@@ -123,36 +172,21 @@ export async function generateApiClient(appDir: string): Promise<void> {
       const routePath = toBunRoutePath(route);
       const clientPath = routePath.replace(/^\/api\/?/, "") || "/";
       const urlPath = routePath.replace(/:([^/]+)/g, "[$1]");
-      const segments = clientPath.split("/").filter(Boolean);
+      const segments =
+        clientPath === "/" ? [] : clientPath.split("/").filter(Boolean);
 
-      // Build nested tree structure
-      let current: any = routeTree;
-      const lastIndex = segments.length - 1;
+      const importName = `Route${importCounter++}`;
+      typeImports.push(
+        `import type * as ${importName} from "../app/${route.filepath}";`
+      );
 
-      for (let i = 0; i <= lastIndex; i++) {
-        const key = segments[i];
-        if (!key) continue;
-
-        if (i === lastIndex) {
-          // Add methods at leaf node
-          if (!current[key]) current[key] = {};
-          const importName = `Route${importCounter++}`;
-          typeImports.push(
-            `import type * as ${importName} from "../app/${route.filepath}";`
-          );
-
-          for (const method of availableMethods) {
-            current[key][method] = {
-              path: urlPath,
-              importName,
-              method,
-              typeAlias: `${importName}_${method}`,
-            };
-          }
-        } else {
-          // Navigate/create intermediate nodes
-          current = current[key] = current[key] || {};
-        }
+      for (const method of availableMethods) {
+        insertRouteMethod(routeTree, segments, {
+          path: urlPath,
+          importName,
+          method,
+          typeAlias: `${importName}_${method}`,
+        });
       }
     } catch (error) {
       console.warn(`Could not analyze API route: ${route.filepath}`);
@@ -160,7 +194,7 @@ export async function generateApiClient(appDir: string): Promise<void> {
   }
 
   // Generate client code
-  const clientCode = generateClientCode(routeTree, typeImports);
+  const clientCode = generateClientCode(routeTree, typeImports, config);
   await Bun.write(join(bunboxDir, "api-client.ts"), clientCode);
 }
 
@@ -168,8 +202,9 @@ export async function generateApiClient(appDir: string): Promise<void> {
  * Generate the actual client code from route tree
  */
 function generateClientCode(
-  routeTree: Record<string, any>,
-  typeImports: string[]
+  routeTree: ApiRouteTreeNode,
+  typeImports: string[],
+  config?: ResolvedBunboxConfig
 ): string {
   const lines: string[] = [
     "/**",
@@ -184,187 +219,47 @@ function generateClientCode(
     lines.push(...typeImports, "");
   }
 
-  // Add Infer utility from bunbox
-  lines.push("import type { Infer } from '@ademattos/bunbox';", "");
-
-  // Generate type aliases for each route method
-  const { internalTypes, exportedTypes } = generateTypeAliases(routeTree);
-  if (internalTypes.length > 0) {
-    lines.push("// Internal route type definitions", ...internalTypes, "");
-  }
-  if (exportedTypes.length > 0) {
-    lines.push("// Exported response types", ...exportedTypes, "");
+  // Generate type aliases
+  const typeAliases = generateTypeAliases(routeTree);
+  if (typeAliases.length > 0) {
+    lines.push("// Response types extracted from handlers", ...typeAliases, "");
   }
 
+  // Add request function
   lines.push(
-    "// Request options interface",
-    "interface RequestOptions<TParams = any, TQuery = any, TBody = any> {",
-    "  params?: TParams;",
-    "  query?: TQuery;",
-    "  body?: TBody;",
-    "  headers?: HeadersInit;",
-    "}",
-    ""
-  );
-
-  // Add makeRequest function
-  lines.push(
-    "async function request<T = any>(",
-    "  method: string,",
-    "  path: string,",
-    "  options?: RequestOptions",
-    "): Promise<T> {",
+    "async function request<T>(method: string, path: string, opts?: any): Promise<T> {",
     "  let url = path;",
-    "",
-    "  if (options?.params) {",
-    "    for (const [key, value] of Object.entries(options.params)) {",
-    "      url = url.replace(`[${key}]`, String(value));",
-    "    }",
+    "  if (opts?.params) {",
+    "    for (const [k, v] of Object.entries(opts.params)) url = url.replace(`[${k}]`, String(v));",
     "  }",
-    "",
-    "  if (options?.query) {",
-    "    const params = new URLSearchParams();",
-    "    for (const [key, value] of Object.entries(options.query)) {",
-    "      params.append(key, String(value));",
-    "    }",
-    "    url += `?${params.toString()}`;",
+    "  if (opts?.query) {",
+    "    const p = new URLSearchParams();",
+    "    for (const [k, v] of Object.entries(opts.query)) p.append(k, String(v));",
+    "    url += `?${p}`;",
     "  }",
-    "",
-    "  const init: RequestInit = {",
+    '  if (url.startsWith("/") && typeof window === "undefined") {',
+    `    url = \`http://\${process.env.BUNBOX_HOSTNAME || "${
+      config?.hostname || "localhost"
+    }"\ }:\${process.env.BUNBOX_PORT || "${config?.port || 3000}"}\${url}\`;`,
+    "  }",
+    "  const res = await fetch(url, {",
     "    method,",
-    "    headers: {",
-    '      "Content-Type": "application/json",',
-    "      ...options?.headers,",
-    "    },",
-    "  };",
-    "",
-    '  if (options?.body && method !== "GET") {',
-    "    init.body = JSON.stringify(options.body);",
-    "  }",
-    "",
-    "  const response = await fetch(url, init);",
-    "",
-    "  if (!response.ok) {",
-    '    const error = await response.json().catch(() => ({ error: "Request failed" }));',
-    "    throw new Error(error.error || `HTTP ${response.status}`);",
-    "  }",
-    "",
-    "  return response.json();",
+    '    headers: { "Content-Type": "application/json", ...opts?.headers },',
+    '    body: opts?.body && method !== "GET" ? JSON.stringify(opts.body) : undefined,',
+    "  });",
+    "  if (!res.ok) throw new Error(await res.text());",
+    "  return res.json();",
     "}",
     ""
   );
 
   // Build API object
   lines.push("export const api = {");
-  lines.push(...buildApiObject(routeTree, 1));
+  const apiLines = buildApiObject(routeTree, 1);
+  if (apiLines.length > 0) {
+    lines.push(...apiLines);
+  }
   lines.push("};");
 
   return lines.join("\n");
-}
-
-/**
- * Generate a single type alias for a field
- */
-function createTypeAlias(
-  typeAlias: string,
-  field: string,
-  importName: string,
-  method: string,
-  defaultType: string
-): string {
-  const fieldCap = field.charAt(0).toUpperCase() + field.slice(1);
-  return `type ${typeAlias}_${fieldCap} = typeof ${importName}.${method} extends { __definition?: { ${field}?: infer T } } ? T extends { validate: any } ? Infer<T> : ${defaultType} : ${defaultType};`;
-}
-
-/**
- * Convert route path to clean type name
- */
-function routeToTypeName(path: string, method: string): string {
-  // Convert /api/users/[id] GET -> UsersIdGet
-  const cleaned = path
-    .replace(/^\/api\/?/, "")
-    .replace(/\[(\w+)\]/g, "$1") // [id] -> id
-    .split("/")
-    .filter(Boolean)
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-
-  const methodCap = method.charAt(0) + method.slice(1).toLowerCase();
-  return cleaned ? `${cleaned}${methodCap}` : methodCap;
-}
-
-/**
- * Generate type aliases for route methods
- */
-function generateTypeAliases(node: Record<string, any>): {
-  internalTypes: string[];
-  exportedTypes: string[];
-} {
-  const internalTypes: string[] = [];
-  const exportedTypes: string[] = [];
-  const defaults = {
-    params: "Record<string, string>",
-    query: "Record<string, string>",
-    body: "any",
-    response: "any",
-  };
-
-  function traverse(obj: Record<string, any>) {
-    for (const value of Object.values(obj)) {
-      if (value.path && value.method && value.typeAlias) {
-        const { typeAlias, importName, method, path } = value;
-
-        // Generate internal types for all fields
-        for (const [field, defaultType] of Object.entries(defaults)) {
-          internalTypes.push(
-            createTypeAlias(typeAlias, field, importName, method, defaultType)
-          );
-        }
-
-        // Generate clean exported types
-        const exportName = routeToTypeName(path, method);
-        exportedTypes.push(
-          `export type ${exportName}Response = ${typeAlias}_Response;`,
-          `export type ${exportName}Params = ${typeAlias}_Params;`,
-          `export type ${exportName}Body = ${typeAlias}_Body;`
-        );
-      } else if (typeof value === "object") {
-        traverse(value);
-      }
-    }
-  }
-
-  traverse(node);
-  return { internalTypes, exportedTypes };
-}
-
-/**
- * Recursively build the API object structure
- */
-function buildApiObject(node: Record<string, any>, indent: number): string[] {
-  const lines: string[] = [];
-  const indentStr = "  ".repeat(indent);
-  const entries = Object.entries(node);
-
-  entries.forEach(([key, value], i) => {
-    const comma = i < entries.length - 1 ? "," : "";
-
-    if (value.path && value.method) {
-      // Method definition
-      const { path, method, typeAlias } = value;
-      lines.push(
-        `${indentStr}${method}: (opts?: RequestOptions<${typeAlias}_Params, ${typeAlias}_Query, ${typeAlias}_Body>) => request<${typeAlias}_Response>("${method}", "${path}", opts)${comma}`
-      );
-    } else {
-      // Nested object
-      const quotedKey = /^:|[^a-zA-Z0-9_$]/.test(key) ? `"${key}"` : key;
-      lines.push(
-        `${indentStr}${quotedKey}: {`,
-        ...buildApiObject(value, indent + 1),
-        `${indentStr}}${comma}`
-      );
-    }
-  });
-
-  return lines;
 }

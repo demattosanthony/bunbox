@@ -25,16 +25,12 @@ type EventListener<T = any> = (message: SocketMessage<T>) => void;
 export class SocketClient<P extends Protocol = any> {
   private ws: WebSocket | null = null;
   private url: string;
-  private userData: { username: string; [key: string]: any };
+  private userData: Record<string, any>;
   private listeners: Map<string, Set<EventListener>> = new Map();
   private connected = false;
   private closeResolver: (() => void) | null = null;
 
-  constructor(
-    url: string,
-    protocol: P,
-    userData: { username: string; [key: string]: any }
-  ) {
+  constructor(url: string, protocol: P, userData?: Record<string, any>) {
     // Convert relative URL to absolute WebSocket URL
     if (url.startsWith("/")) {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -43,15 +39,8 @@ export class SocketClient<P extends Protocol = any> {
       this.url = url;
     }
 
-    this.userData = userData;
+    this.userData = userData || {};
     this.connect();
-  }
-
-  /**
-   * Get current username
-   */
-  get username(): string {
-    return this.userData.username;
   }
 
   /**

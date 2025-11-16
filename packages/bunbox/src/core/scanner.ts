@@ -43,19 +43,36 @@ async function scanFiles(dir: string, patterns: string[]): Promise<string[]> {
 }
 
 /**
- * Scan for page routes in app/ directory
+ * Generic route scanner
  */
-export async function scanPageRoutes(appDir: string): Promise<Route[]> {
-  const files = await scanFiles(appDir, PAGE_PATTERNS);
+async function scanRoutes(
+  dir: string,
+  patterns: string[],
+  type: "page" | "api" | "ws" | "socket",
+  pathPrefix?: string,
+  excludePrefixes?: string[]
+): Promise<Route[]> {
+  const files = await scanFiles(dir, patterns);
   const routes: Route[] = [];
 
   for (const file of files) {
-    // Exclude API and WebSocket directories
-    if (file.startsWith("api/") || file.startsWith("ws/")) continue;
-    routes.push(filePathToRoute(file, "page"));
+    // Check exclusions
+    if (excludePrefixes?.some((prefix) => file.startsWith(prefix))) {
+      continue;
+    }
+
+    const filepath = pathPrefix ? `${pathPrefix}/${file}` : file;
+    routes.push(filePathToRoute(filepath, type));
   }
 
   return routes;
+}
+
+/**
+ * Scan for page routes in app/ directory
+ */
+export async function scanPageRoutes(appDir: string): Promise<Route[]> {
+  return scanRoutes(appDir, PAGE_PATTERNS, "page", undefined, ["api/", "ws/"]);
 }
 
 /**
@@ -63,42 +80,21 @@ export async function scanPageRoutes(appDir: string): Promise<Route[]> {
  */
 export async function scanApiRoutes(appDir: string): Promise<Route[]> {
   const apiDir = join(appDir, "api");
-  const files = await scanFiles(apiDir, ROUTE_PATTERNS);
-  const routes: Route[] = [];
-
-  for (const file of files) {
-    routes.push(filePathToRoute(`api/${file}`, "api"));
-  }
-
-  return routes;
+  return scanRoutes(apiDir, ROUTE_PATTERNS, "api", "api");
 }
 
 /**
  * Scan for WebSocket routes in ws/ directory
  */
 export async function scanWsRoutes(wsDir: string): Promise<Route[]> {
-  const files = await scanFiles(wsDir, ROUTE_PATTERNS);
-  const routes: Route[] = [];
-
-  for (const file of files) {
-    routes.push(filePathToRoute(`ws/${file}`, "ws"));
-  }
-
-  return routes;
+  return scanRoutes(wsDir, ROUTE_PATTERNS, "ws", "ws");
 }
 
 /**
  * Scan for socket routes in sockets/ directory
  */
 export async function scanSocketRoutes(socketsDir: string): Promise<Route[]> {
-  const files = await scanFiles(socketsDir, ROUTE_PATTERNS);
-  const routes: Route[] = [];
-
-  for (const file of files) {
-    routes.push(filePathToRoute(`sockets/${file}`, "socket"));
-  }
-
-  return routes;
+  return scanRoutes(socketsDir, ROUTE_PATTERNS, "socket", "sockets");
 }
 
 /**

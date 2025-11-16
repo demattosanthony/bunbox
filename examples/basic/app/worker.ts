@@ -10,6 +10,7 @@ import { ChatProtocol } from "./sockets/chat/protocol";
 const username = "@john-doe";
 
 export default async function worker() {
+  // Test socket client
   const socketClient = new SocketClient(
     "ws://localhost:3000/sockets/chat",
     ChatProtocol,

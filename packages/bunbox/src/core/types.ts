@@ -63,44 +63,7 @@ export interface ApiRouteModule {
   PATCH?: RouteHandler;
 }
 
-/**
- * Validation result from schema validation
- */
-export interface ValidationResult<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-/**
- * Schema interface for runtime validation
- */
-export interface Schema<T> {
-  validate(value: unknown): ValidationResult<T>;
-  optional(): Schema<T | undefined>;
-}
-
-/**
- * Route definition with typed params, query, body, and response
- * Used with defineRoute helper for type-safe API routes
- */
-export interface RouteDefinition<
-  TParams = Record<string, string>,
-  TQuery = Record<string, string>,
-  TBody = any,
-  TResponse = any
-> {
-  params?: Schema<TParams>;
-  query?: Schema<TQuery>;
-  body?: Schema<TBody>;
-  response?: Schema<TResponse>;
-  handler: (req: {
-    params: TParams;
-    query: TQuery;
-    body: TBody;
-    raw: BunboxRequest;
-  }) => TResponse | Promise<TResponse>;
-}
+// Schema types removed - use Zod or other validation libraries directly
 
 /**
  * WebSocket handler for real-time connections
@@ -238,11 +201,8 @@ export type LayoutModules = Record<
 export interface SocketUser {
   /** Server-assigned unique user ID */
   id: string;
-  /** Custom user data (at minimum contains username) */
-  data: {
-    username: string;
-    [key: string]: any;
-  };
+  /** Custom user data */
+  data: Record<string, any>;
 }
 
 /**
@@ -289,7 +249,7 @@ export interface SocketRouteModule {
   /** Optional authorization check before connection */
   onAuthorize?: (
     req: Request,
-    userData: { username: string; [key: string]: any }
+    userData: Record<string, any>
   ) => boolean | Promise<boolean>;
 }
 

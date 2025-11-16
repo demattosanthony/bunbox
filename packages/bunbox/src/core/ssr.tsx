@@ -5,7 +5,24 @@
 import React from "react";
 import { renderToReadableStream } from "react-dom/server";
 import type { PageMetadata, PageModule, LayoutModule } from "./types";
-import { readFile, getFaviconContentType } from "./utils";
+import { getFaviconContentType } from "./utils";
+
+/**
+ * HMR WebSocket client script for development hot reload
+ */
+const HMR_SCRIPT = `(function() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(protocol + '//' + window.location.host + '/__bunbox/hmr');
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'reload') {
+      console.log('🔄 Hot reload triggered');
+      window.location.reload();
+    }
+  };
+  ws.onerror = () => console.log('⚠️ HMR connection failed');
+  ws.onclose = () => console.log('🔌 HMR disconnected');
+})();`;
 
 /**
  * Merge metadata with page metadata taking precedence
@@ -31,12 +48,17 @@ function mergeMetadata(
  * Check if a file has "use server" directive
  */
 export async function checkUseServer(filePath: string): Promise<boolean> {
-  const content = await readFile(filePath);
-  if (!content) return false;
+  try {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) return false;
+    const content = await file.text();
 
-  // Check for "use server" at the top of the file (within first few lines)
-  const lines = content.split("\n").slice(0, 5);
-  return lines.some((line) => line.trim().match(/^["']use server["'];?$/));
+    // Check for "use server" at the top of the file (within first few lines)
+    const lines = content.split("\n").slice(0, 5);
+    return lines.some((line) => line.trim().match(/^["']use server["'];?$/));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -77,25 +99,7 @@ export async function renderPage(
 
   // HMR script for development
   const hmrScript = development ? (
-    <script
-      dangerouslySetInnerHTML={{
-        __html: `
-      (function() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(protocol + '//' + window.location.host + '/__bunbox/hmr');
-        ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'reload') {
-            console.log('🔄 Hot reload triggered');
-            window.location.reload();
-          }
-        };
-        ws.onerror = () => console.log('⚠️ HMR connection failed');
-        ws.onclose = () => console.log('🔌 HMR disconnected');
-      })();
-    `,
-      }}
-    />
+    <script dangerouslySetInnerHTML={{ __html: HMR_SCRIPT }} />
   ) : null;
 
   // Wrap in full HTML document structure for SSR
@@ -169,25 +173,7 @@ export function generateHTMLShell(
     : "";
 
   // Build HMR script
-  const hmrScript = development
-    ? `
-    <script>
-      // HMR WebSocket connection
-      (function() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(protocol + '//' + window.location.host + '/__bunbox/hmr');
-        ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.type === 'reload') {
-            console.log('🔄 Hot reload triggered');
-            window.location.reload();
-          }
-        };
-        ws.onerror = () => console.log('⚠️ HMR connection failed');
-        ws.onclose = () => console.log('🔌 HMR disconnected');
-      })();
-    </script>`
-    : "";
+  const hmrScript = development ? `\n    <script>${HMR_SCRIPT}</script>` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">

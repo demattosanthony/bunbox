@@ -40,13 +40,9 @@ export type {
   SocketMessage,
   SocketContext,
   SocketRouteModule,
-  Schema,
-  ValidationResult,
-  RouteDefinition,
 } from "./core/types";
 
 export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";
 
-export { schema, type Infer } from "./core/schema";
-export { defineRoute, json, error, type TypedRouteHandler } from "./core/route";
+export { api, json, error } from "./core/route";

@@ -23,9 +23,12 @@ import {
   fileExists,
   transpileForBrowser,
   getFaviconContentType,
-  getBunboxDir,
+  getErrorMessage,
+  loadBunPlugins,
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
+import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
+import { getTopicFromRoute } from "./server/path-utils";
 import type { Server } from "bun";
 import type {
   Route,
@@ -57,73 +60,11 @@ export type {
   BunboxServerConfig,
 };
 
-// HTTP methods supported by API routes
-const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
-type HttpMethod = (typeof HTTP_METHODS)[number];
-
 /**
- * WebSocket context implementation
- * Provides convenient broadcasting methods for WebSocket routes
+ * Generate Cache-Control header value based on environment
  */
-class WebSocketContextImpl implements WebSocketContext {
-  constructor(
-    public readonly topic: string,
-    private readonly server: Server<WebSocketData>
-  ) {}
-
-  broadcast(
-    data: string | ArrayBuffer | Uint8Array,
-    compress?: boolean
-  ): number {
-    return this.server.publish(this.topic, data, compress);
-  }
-
-  broadcastJSON(data: any, compress?: boolean): number {
-    return this.server.publish(this.topic, JSON.stringify(data), compress);
-  }
-}
-
-/**
- * Socket context implementation
- * Provides methods for socket route handlers
- */
-class SocketContextImpl implements SocketContext {
-  constructor(
-    private readonly topic: string,
-    private readonly server: Server<WebSocketData>,
-    private readonly users: Map<string, SocketUser>
-  ) {}
-
-  broadcast<T = any>(type: string, data: T): void {
-    const message: SocketMessage<T> = {
-      type,
-      data,
-      timestamp: Date.now(),
-      userId: "",
-    };
-    this.server.publish(this.topic, JSON.stringify(message));
-  }
-
-  sendTo<T = any>(userId: string, type: string, data: T): void {
-    // Send to a specific user by iterating through subscriptions
-    // Note: This is a simple implementation. For large scale, consider a userId->ws map
-    const message: SocketMessage<T> = {
-      type,
-      data,
-      timestamp: Date.now(),
-      userId,
-    };
-
-    const user = this.users.get(userId);
-    if (user) {
-      // Publish to a user-specific topic (requires manual subscription)
-      this.server.publish(`socket-user-${userId}`, JSON.stringify(message));
-    }
-  }
-
-  getUsers(): SocketUser[] {
-    return Array.from(this.users.values());
-  }
+function getCacheControl(development: boolean, maxAge: number = 3600): string {
+  return development ? "no-cache" : `public, max-age=${maxAge}`;
 }
 
 class BunboxServer {
@@ -151,8 +92,9 @@ class BunboxServer {
 
   /**
    * Initialize the server by scanning routes
+   * Returns ready message info instead of printing it
    */
-  async init() {
+  async init(): Promise<{ isWorkerOnly: boolean; readyMessage: string }> {
     const startTime = Date.now();
 
     // Scan for worker file first
@@ -166,7 +108,12 @@ class BunboxServer {
       await scanSocketRoutes(this.config.socketsDir)
     );
 
-    const isWorkerOnly = this.isWorkerOnly();
+    const isWorkerOnly =
+      this.workerPath !== null &&
+      this.pageRoutes.length === 0 &&
+      this.apiRoutes.length === 0 &&
+      this.wsRoutes.length === 0 &&
+      this.socketRoutes.length === 0;
 
     // Skip HTTP-related initialization in worker-only mode
     if (!isWorkerOnly) {
@@ -188,7 +135,7 @@ class BunboxServer {
         await generateRoutesFile(this.config.appDir);
 
         // Generate typed API client
-        await generateApiClient(this.config.appDir);
+        await generateApiClient(this.config.appDir, this.config);
       }
 
       // Check which pages have "use server"
@@ -196,8 +143,22 @@ class BunboxServer {
 
       // Load WebSocket handlers in production
       if (!this.config.development) {
-        await this.loadWsHandlers();
-        await this.loadSocketHandlers();
+        for (const route of this.wsRoutes) {
+          const path = join(this.config.wsDir, route.filepath);
+          const handler = await dynamicImport<WsRouteModule>(
+            resolveAbsolutePath(path),
+            false
+          );
+          this.wsHandlers.set(route.filepath, handler);
+        }
+        for (const route of this.socketRoutes) {
+          const path = join(this.config.appDir, route.filepath);
+          const handler = await dynamicImport<SocketRouteModule>(
+            resolveAbsolutePath(path),
+            false
+          );
+          this.socketHandlers.set(route.filepath, handler);
+        }
       }
 
       // Load and cache metadata from root layout
@@ -207,12 +168,7 @@ class BunboxServer {
       }
     }
 
-    // Note: Worker is NOT started here in production mode
-    // It will be started after the server is listening
-    // In development mode with --hot, we can start it here
-    if (this.config.development && this.workerPath) {
-      await this.startWorker();
-    }
+    // Worker starts after server is listening (see startWorkerAfterListen)
 
     const duration = Date.now() - startTime;
     const totalRoutes =
@@ -221,12 +177,14 @@ class BunboxServer {
       this.wsRoutes.length +
       this.socketRoutes.length;
 
+    // Return ready message info instead of printing
+    let readyMessage: string;
     if (isWorkerOnly) {
-      console.log(` ✓ Worker ready in ${duration}ms`);
+      readyMessage = ` ✓ Worker ready in ${duration}ms`;
     } else if (totalRoutes > 0) {
-      console.log(` ✓ Ready in ${duration}ms (${totalRoutes} routes)`);
+      readyMessage = ` ✓ Ready in ${duration}ms (${totalRoutes} routes)`;
     } else {
-      console.log(` ✓ Ready in ${duration}ms`);
+      readyMessage = ` ✓ Ready in ${duration}ms`;
     }
 
     // Set up file watcher in development mode
@@ -238,6 +196,11 @@ class BunboxServer {
         onChange: () => this.handleFileChange(),
       });
     }
+
+    return {
+      isWorkerOnly,
+      readyMessage,
+    };
   }
 
   /**
@@ -279,7 +242,7 @@ class BunboxServer {
         }
       }
     } catch (error) {
-      console.error("Failed to start worker:", error);
+      console.error(`Failed to start worker: ${getErrorMessage(error)}`);
     }
   }
 
@@ -299,29 +262,6 @@ class BunboxServer {
       this.workerInstance = null;
     }
   }
-
-  /**
-   * Convert route filepath to filesystem path
-   */
-  private getWsPath(filepath: string): string {
-    return join(this.config.wsDir, filepath.replace(/^ws\//, ""));
-  }
-
-  /**
-   * Load WebSocket handlers (production only)
-   */
-  private async loadWsHandlers() {
-    for (const route of this.wsRoutes) {
-      const wsPath = this.getWsPath(route.filepath);
-      try {
-        const module = await dynamicImport<WsRouteModule>(wsPath, false);
-        this.wsHandlers.set(route.filepath, module);
-      } catch (error) {
-        console.error(`Failed to load WebSocket handler: ${wsPath}`, error);
-      }
-    }
-  }
-
   /**
    * Handle file changes in development mode
    */
@@ -355,79 +295,6 @@ class BunboxServer {
   }
 
   /**
-   * Get WebSocket handler (with hot reload support in development)
-   */
-  private async getWsHandler(
-    filepath: string
-  ): Promise<WsRouteModule | undefined> {
-    if (!this.config.development) {
-      return this.wsHandlers.get(filepath);
-    }
-
-    try {
-      return await dynamicImport<WsRouteModule>(this.getWsPath(filepath), true);
-    } catch (error) {
-      console.error(`Failed to load WebSocket handler: ${filepath}`, error);
-      return undefined;
-    }
-  }
-
-  /**
-   * Convert route filepath to socket filesystem path
-   */
-  private getSocketPath(filepath: string): string {
-    return join(this.config.socketsDir, filepath.replace(/^sockets\//, ""));
-  }
-
-  /**
-   * Load socket handlers (production only)
-   */
-  private async loadSocketHandlers() {
-    for (const route of this.socketRoutes) {
-      const socketPath = this.getSocketPath(route.filepath);
-      try {
-        const module = await dynamicImport<SocketRouteModule>(
-          socketPath,
-          false
-        );
-        this.socketHandlers.set(route.filepath, module);
-      } catch (error) {
-        console.error(`Failed to load socket handler: ${socketPath}`, error);
-      }
-    }
-  }
-
-  /**
-   * Get socket handler (with hot reload support in development)
-   */
-  private async getSocketHandler(
-    filepath: string
-  ): Promise<SocketRouteModule | undefined> {
-    if (!this.config.development) {
-      return this.socketHandlers.get(filepath);
-    }
-
-    try {
-      return await dynamicImport<SocketRouteModule>(
-        this.getSocketPath(filepath),
-        true
-      );
-    } catch (error) {
-      console.error(`Failed to load socket handler: ${filepath}`, error);
-      return undefined;
-    }
-  }
-
-  /**
-   * Create topic name from route filepath
-   * "ws/chat/route.ts" -> "ws-chat"
-   * "sockets/chat/route.ts" -> "socket-chat"
-   */
-  private getTopicFromRoute(filepath: string): string {
-    return filepath.replace(/\/route\.ts$/, "").replaceAll("/", "-");
-  }
-
-  /**
    * Load metadata from root layout
    */
   private async loadMetadata(): Promise<PageMetadata> {
@@ -443,17 +310,12 @@ class BunboxServer {
       return layoutModule.metadata || {};
     } catch (error) {
       if (this.config.development) {
-        console.warn("Could not load metadata from root layout:", error);
+        console.warn(
+          `Could not load metadata from root layout: ${getErrorMessage(error)}`
+        );
       }
       return {};
     }
-  }
-
-  /**
-   * Get cached metadata or empty object
-   */
-  private getMetadata(): PageMetadata {
-    return this.cachedMetadata || {};
   }
 
   /**
@@ -462,16 +324,15 @@ class BunboxServer {
   private buildClientRoute(): RouteHandlers {
     return {
       GET: async () => {
-        const bunboxDir = getBunboxDir();
+        const bunboxDir = join(process.cwd(), ".bunbox");
         const clientJsPath = join(bunboxDir, "client.js");
 
         // In production, try to serve pre-built client.js first
         if (!this.config.development && (await fileExists(clientJsPath))) {
-          const file = Bun.file(clientJsPath);
-          return new Response(file, {
+          return new Response(Bun.file(clientJsPath), {
             headers: {
               "Content-Type": "application/javascript",
-              "Cache-Control": "public, max-age=3600",
+              "Cache-Control": getCacheControl(false),
             },
           });
         }
@@ -489,16 +350,13 @@ class BunboxServer {
 
         const result = await transpileForBrowser([entryPath], {
           minify: !this.config.development,
-          external: [],
         });
 
         if (result.success && result.output) {
           return new Response(result.output, {
             headers: {
               "Content-Type": "application/javascript",
-              "Cache-Control": this.config.development
-                ? "no-cache"
-                : "public, max-age=3600",
+              "Cache-Control": getCacheControl(this.config.development),
             },
           });
         }
@@ -518,19 +376,38 @@ class BunboxServer {
         const cssPath = join(this.config.appDir, "index.css");
         const file = Bun.file(cssPath);
 
-        if (await file.exists()) {
-          return new Response(file, {
-            headers: {
-              "Content-Type": "text/css",
-              "Cache-Control": this.config.development
-                ? "no-cache"
-                : "public, max-age=3600",
-            },
+        if (!(await file.exists())) {
+          return new Response("/* No CSS file found */", {
+            headers: { "Content-Type": "text/css" },
           });
         }
 
-        return new Response("/* No CSS file found */", {
-          headers: { "Content-Type": "text/css" },
+        try {
+          const plugins = await loadBunPlugins();
+          const result = await Bun.build({
+            entrypoints: [cssPath],
+            minify: !this.config.development,
+            plugins: plugins.length ? plugins : undefined,
+          });
+
+          if (result.success && result.outputs[0]) {
+            return new Response(await result.outputs[0].text(), {
+              headers: {
+                "Content-Type": "text/css",
+                "Cache-Control": getCacheControl(this.config.development),
+              },
+            });
+          }
+        } catch (error) {
+          console.error("CSS processing error:", error);
+        }
+
+        // Fallback to raw file
+        return new Response(file, {
+          headers: {
+            "Content-Type": "text/css",
+            "Cache-Control": getCacheControl(this.config.development),
+          },
         });
       },
     };
@@ -542,23 +419,18 @@ class BunboxServer {
   private buildFaviconRoute(): RouteHandlers {
     return {
       GET: async () => {
-        const metadata = this.getMetadata();
+        const metadata = this.cachedMetadata || {};
         if (!metadata.favicon) {
           return new Response("No favicon configured", { status: 404 });
         }
 
-        const faviconPath = join(this.config.appDir, metadata.favicon);
-        const file = Bun.file(faviconPath);
+        const file = Bun.file(join(this.config.appDir, metadata.favicon));
 
         if (await file.exists()) {
-          const contentType = getFaviconContentType(metadata.favicon);
-
           return new Response(file, {
             headers: {
-              "Content-Type": contentType,
-              "Cache-Control": this.config.development
-                ? "no-cache"
-                : "public, max-age=86400",
+              "Content-Type": getFaviconContentType(metadata.favicon),
+              "Cache-Control": getCacheControl(this.config.development, 86400),
             },
           });
         }
@@ -575,11 +447,13 @@ class BunboxServer {
     req: Request,
     route: Route,
     absolutePath: string,
-    method: HttpMethod
+    method: string
   ): Promise<Response> {
     try {
       const module = await dynamicImport<ApiRouteModule>(absolutePath, true);
-      const handler = module[method];
+      const handler = module[method as keyof ApiRouteModule] as
+        | RouteHandler
+        | undefined;
       if (!handler) {
         return new Response("Method not found", { status: 404 });
       }
@@ -603,6 +477,8 @@ class BunboxServer {
       "/__bunbox/styles.css": this.buildStylesRoute(),
       "/__bunbox/favicon": this.buildFaviconRoute(),
     };
+
+    const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 
     // Build API routes
     for (const route of this.apiRoutes) {
@@ -701,7 +577,7 @@ class BunboxServer {
         }
       }
     } catch (error) {
-      console.warn("Failed to parse request body:", error);
+      console.warn(`Failed to parse request body: ${getErrorMessage(error)}`);
       return null;
     }
   }
@@ -733,7 +609,7 @@ class BunboxServer {
     try {
       return await handler(bunboxReq);
     } catch (error) {
-      console.error("API route error:", error);
+      console.error(`API route error: ${getErrorMessage(error)}`);
       return new Response("Internal Server Error", { status: 500 });
     }
   }
@@ -786,29 +662,19 @@ class BunboxServer {
         headers: { "Content-Type": "text/html" },
       });
     } catch (error) {
-      console.error("Page route error:", error);
-      return new Response(`Error rendering page: ${error}`, { status: 500 });
+      const message = getErrorMessage(error);
+      console.error(`Page route error: ${message}`);
+      return new Response(`Error rendering page: ${message}`, { status: 500 });
     }
-  }
-
-  /**
-   * Check if running in worker-only mode (no routes, only worker)
-   */
-  isWorkerOnly(): boolean {
-    return (
-      this.workerPath !== null &&
-      this.pageRoutes.length === 0 &&
-      this.apiRoutes.length === 0 &&
-      this.wsRoutes.length === 0 &&
-      this.socketRoutes.length === 0
-    );
   }
 
   /**
    * Build Bun.serve() configuration object
    */
-  async getServerConfig(): Promise<BunboxServerConfig> {
-    await this.init();
+  async getServerConfig(): Promise<
+    BunboxServerConfig & { readyMessage: string }
+  > {
+    const initResult = await this.init();
 
     // Build routes
     const routes = await this.buildRoutes();
@@ -824,20 +690,16 @@ class BunboxServer {
           !url.pathname.startsWith("/api") &&
           !url.pathname.startsWith("/ws")
         ) {
-          const publicPath = join(this.config.publicDir, url.pathname);
-          const file = Bun.file(publicPath);
+          const file = Bun.file(join(this.config.publicDir, url.pathname));
 
           if (await file.exists()) {
             const headers: Record<string, string> = {
-              "Cache-Control": this.config.development
-                ? "no-cache"
-                : "public, max-age=3600",
+              "Cache-Control": getCacheControl(this.config.development),
             };
 
             // Ensure UTF-8 encoding for text files
-            const contentType = file.type;
-            if (contentType.startsWith("text/")) {
-              headers["Content-Type"] = `${contentType}; charset=utf-8`;
+            if (file.type.startsWith("text/")) {
+              headers["Content-Type"] = `${file.type}; charset=utf-8`;
             }
 
             return new Response(file, { headers });
@@ -847,7 +709,7 @@ class BunboxServer {
         const html = generateHTMLShell(
           {},
           Object.fromEntries(url.searchParams),
-          this.getMetadata(),
+          this.cachedMetadata || {},
           this.config.development
         );
 
@@ -861,13 +723,11 @@ class BunboxServer {
       port: this.config.port,
       hostname: this.config.hostname,
       routes,
-      workerOnly: this.isWorkerOnly(),
+      workerOnly: initResult.isWorkerOnly,
+      readyMessage: initResult.readyMessage,
       workerPath: this.workerPath,
       startWorkerAfterListen: async () => {
-        // Start worker in production after server is listening
-        if (!this.config.development && this.workerPath) {
-          await this.startWorker();
-        }
+        if (this.workerPath) await this.startWorker();
       },
       workerCleanup: async () => {
         await this.stopWorker();
@@ -945,7 +805,9 @@ class BunboxServer {
               };
               data.handler.onMessage?.(data.user, socketMessage, data.ctx);
             } catch (error) {
-              console.error("Failed to parse socket message:", error);
+              console.error(
+                `Failed to parse socket message: ${getErrorMessage(error)}`
+              );
             }
             return;
           }
@@ -999,10 +861,15 @@ class BunboxServer {
       const match = matchRoute(req.url, route);
       if (!match) continue;
 
-      const handler = await this.getWsHandler(route.filepath);
+      const handler = this.config.development
+        ? await dynamicImport<WsRouteModule>(
+            resolveAbsolutePath(join(this.config.wsDir, route.filepath)),
+            true
+          )
+        : this.wsHandlers.get(route.filepath);
       if (!handler) continue;
 
-      const topic = this.getTopicFromRoute(route.filepath);
+      const topic = getTopicFromRoute(route.filepath);
 
       // Check for custom upgrade logic
       if (handler.upgrade) {
@@ -1037,21 +904,23 @@ class BunboxServer {
       const match = matchRoute(req.url, route);
       if (!match) continue;
 
-      const handler = await this.getSocketHandler(route.filepath);
+      const handler = this.config.development
+        ? await dynamicImport<SocketRouteModule>(
+            resolveAbsolutePath(join(this.config.appDir, route.filepath)),
+            true
+          )
+        : this.socketHandlers.get(route.filepath);
       if (!handler) continue;
 
-      const topic = this.getTopicFromRoute(route.filepath);
+      const topic = getTopicFromRoute(route.filepath);
 
       // Extract user data from URL query parameters
       const url = new URL(req.url);
-      const username = url.searchParams.get("username") || "Anonymous";
-      const userData: { username: string; [key: string]: any } = { username };
+      const userData: Record<string, any> = {};
 
-      // Add any additional query params as user data
+      // Add all query params as user data
       url.searchParams.forEach((value, key) => {
-        if (key !== "username") {
-          userData[key] = value;
-        }
+        userData[key] = value;
       });
 
       // Check for authorization

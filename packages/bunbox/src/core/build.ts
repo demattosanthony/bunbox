@@ -14,7 +14,7 @@ import {
   scanWorker,
 } from "./scanner";
 import { generateRoutesFile, generateApiClient } from "./generator";
-import { fileExists, transpileForBrowser, getBunboxDir } from "./utils";
+import { fileExists, transpileForBrowser, getErrorMessage } from "./utils";
 
 /**
  * Build metadata stored in .bunbox/.built
@@ -62,13 +62,13 @@ export async function buildForProduction(
   );
 
   // Create .bunbox directory
-  const bunboxDir = getBunboxDir();
+  const bunboxDir = join(process.cwd(), ".bunbox");
   await mkdir(bunboxDir, { recursive: true });
 
   // Generate route files
   console.log(" ○ Generating route files...");
   await generateRoutesFile(config.appDir);
-  await generateApiClient(config.appDir);
+  await generateApiClient(config.appDir, config);
   console.log(" ✓ Generated routes.ts and api-client.ts");
 
   // Build client bundle
@@ -89,8 +89,8 @@ export async function buildForProduction(
 
   if (!buildResult.success || !buildResult.output) {
     console.error(" ✗ Failed to build client bundle");
-    if (buildResult.logs) {
-      console.error(buildResult.logs);
+    if (buildResult.logs && buildResult.logs.length > 0) {
+      buildResult.logs.forEach((log) => console.error(log));
     }
     process.exit(1);
   }
@@ -141,7 +141,7 @@ export async function hasBuildArtifacts(): Promise<boolean> {
  * Read and validate build metadata
  */
 export async function getBuildMetadata(): Promise<BuildMetadata | null> {
-  const metadataPath = join(getBunboxDir(), ".built");
+  const metadataPath = join(process.cwd(), ".bunbox", ".built");
 
   if (!(await fileExists(metadataPath))) {
     return null;
@@ -166,7 +166,7 @@ export async function getBuildMetadata(): Promise<BuildMetadata | null> {
 
     return data as BuildMetadata;
   } catch (error) {
-    console.warn("Failed to read build metadata:", error);
+    console.warn(`Failed to read build metadata: ${getErrorMessage(error)}`);
     return null;
   }
 }
