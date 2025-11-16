@@ -1,5 +1,7 @@
 # 📦 Bunbox
 
+[![npm version](https://img.shields.io/npm/v/@ademattos/bunbox.svg)](https://www.npmjs.com/package/@ademattos/bunbox)
+
 A minimal full-stack framework for Bun. Create files in `app/` and they become routes - pages, APIs, socket servers, and workers.
 
 ## What You Get
@@ -10,7 +12,7 @@ A minimal full-stack framework for Bun. Create files in `app/` and they become r
 - **Server-side rendering** - React on the server
 - **Workers** - Background tasks
 - **Zero config** - Works out of the box
-- **Tiny** - Only 2,449 lines of core code
+- **Tiny** - Only 2,741 lines of core code
 
 ## 🚀 Quick Start
 
@@ -61,10 +63,8 @@ bun dev
 
 **Minimal by design:**
 
-- No schema system (use Zod if you need validation)
+- Only dependancies are Bun and React
 - No complex abstractions
-- Just TypeScript type inference
-- 2,449 lines of hackable code
 
 **Powerful when needed:**
 
@@ -72,10 +72,6 @@ bun dev
 - Type-safe sockets
 - SSR with React
 - Background workers
-
-**Philosophy:**
-
-> "The best code is deleted code"
 
 Bunbox gives you Next.js-style routing, tRPC-style type safety, and Socket.io-style real-time - all in a tiny, hackable framework.
 

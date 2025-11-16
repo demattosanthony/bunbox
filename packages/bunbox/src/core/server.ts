@@ -190,9 +190,7 @@ class BunboxServer {
     // Set up file watcher in development mode
     if (this.config.development) {
       this.watcher = createWatcher({
-        appDir: this.config.appDir,
-        wsDir: this.config.wsDir,
-        socketsDir: this.config.socketsDir,
+        rootDir: process.cwd(),
         onChange: () => this.handleFileChange(),
       });
     }
@@ -319,6 +317,35 @@ class BunboxServer {
   }
 
   /**
+   * Build assets route for serving imported images, fonts, etc.
+   */
+  private buildAssetsRoute(): RouteHandlers {
+    return {
+      GET: async (req: Request) => {
+        const url = new URL(req.url);
+        const assetPath = url.pathname.replace("/__bunbox/assets/", "");
+        const file = Bun.file(
+          join(process.cwd(), ".bunbox", "assets", assetPath)
+        );
+
+        if (await file.exists()) {
+          return new Response(file, {
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+              "Cache-Control": getCacheControl(
+                this.config.development,
+                31536000
+              ), // 1 year for hashed assets
+            },
+          });
+        }
+
+        return new Response("Asset not found", { status: 404 });
+      },
+    };
+  }
+
+  /**
    * Build client script route
    */
   private buildClientRoute(): RouteHandlers {
@@ -427,10 +454,13 @@ class BunboxServer {
         const file = Bun.file(join(this.config.appDir, metadata.favicon));
 
         if (await file.exists()) {
+          const contentType = getFaviconContentType(metadata.favicon);
           return new Response(file, {
             headers: {
-              "Content-Type": getFaviconContentType(metadata.favicon),
+              "Content-Type": contentType,
               "Cache-Control": getCacheControl(this.config.development, 86400),
+              // Ensure browsers don't treat SVG as HTML
+              "X-Content-Type-Options": "nosniff",
             },
           });
         }
@@ -476,6 +506,7 @@ class BunboxServer {
       "/__bunbox/client.js": this.buildClientRoute(),
       "/__bunbox/styles.css": this.buildStylesRoute(),
       "/__bunbox/favicon": this.buildFaviconRoute(),
+      "/__bunbox/assets/:filename": this.buildAssetsRoute(),
     };
 
     const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;

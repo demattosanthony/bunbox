@@ -13,6 +13,7 @@ import type { PageProps } from "../core/types";
 interface RouterContextValue {
   pathname: string;
   navigate: (path: string) => void;
+  params: Record<string, string>;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -136,6 +137,9 @@ export function Router({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // Scroll to top on navigation
+    window.scrollTo(0, 0);
+
     // Handle popstate (back/forward buttons)
     const handlePopState = () => {
       setCurrentPath(window.location.pathname);
@@ -208,6 +212,7 @@ export function Router({
   const contextValue: RouterContextValue = {
     pathname: currentPath,
     navigate: navigateTo,
+    params: routeMatch?.params || {},
   };
 
   // Render content
@@ -262,6 +267,20 @@ export function useRouter() {
     throw new Error("useRouter must be used within a Router component");
   }
   return context;
+}
+
+/**
+ * Hook to access route parameters
+ * @example
+ * // In /blog/[blogId]/page.tsx
+ * const { blogId } = useParams();
+ */
+export function useParams(): Record<string, string> {
+  const context = useContext(RouterContext);
+  if (!context) {
+    throw new Error("useParams must be used within a Router component");
+  }
+  return context.params;
 }
 
 /**

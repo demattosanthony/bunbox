@@ -5,6 +5,8 @@
 
 import { join } from "path";
 import { createRequire } from "module";
+import { mkdir, copyFile } from "node:fs/promises";
+import { createHash } from "crypto";
 import type { BunPlugin } from "bun";
 
 /**
@@ -50,6 +52,110 @@ export async function fileExists(path: string): Promise<boolean> {
 }
 
 /**
+ * Asset file extensions that should be handled by the loader
+ */
+const ASSET_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "webp",
+  "avif",
+  "ico",
+  "bmp",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "eot",
+];
+
+/**
+ * Generate a hash for a file path to create unique asset names
+ */
+function generateAssetHash(filePath: string): string {
+  const hash = createHash("md5");
+  hash.update(filePath);
+  return hash.digest("hex").slice(0, 8);
+}
+
+/**
+ * Get the MIME type for an asset file
+ */
+function getAssetMimeType(ext: string): string {
+  const mimeTypes: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    avif: "image/avif",
+    ico: "image/x-icon",
+    bmp: "image/bmp",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
+    eot: "application/vnd.ms-fontobject",
+  };
+  return mimeTypes[ext.toLowerCase()] || "application/octet-stream";
+}
+
+/**
+ * Create a plugin to handle asset imports (images, fonts, etc.)
+ */
+function createAssetLoaderPlugin(): BunPlugin {
+  // Create asset pattern
+  const assetPattern = new RegExp(`\\.(${ASSET_EXTENSIONS.join("|")})$`, "i");
+
+  return {
+    name: "bunbox-asset-loader",
+    setup(build) {
+      build.onLoad({ filter: assetPattern }, async (args) => {
+        const filePath = args.path;
+        const ext = filePath.split(".").pop()?.toLowerCase() || "";
+
+        if (!ASSET_EXTENSIONS.includes(ext)) {
+          return undefined;
+        }
+
+        // Generate unique filename with hash
+        const hash = generateAssetHash(filePath);
+        const basename =
+          filePath
+            .split("/")
+            .pop()
+            ?.replace(/\.[^.]+$/, "") || "asset";
+        const filename = `${basename}.${hash}.${ext}`;
+
+        // Ensure assets directory exists
+        const assetsDir = join(process.cwd(), ".bunbox", "assets");
+        await mkdir(assetsDir, { recursive: true });
+
+        // Copy asset to public directory
+        const destPath = join(assetsDir, filename);
+        try {
+          await copyFile(filePath, destPath);
+        } catch (error) {
+          console.error(`Failed to copy asset ${filePath}:`, error);
+          return undefined;
+        }
+
+        // Return a module that exports the public URL
+        const publicUrl = `/__bunbox/assets/${filename}`;
+
+        return {
+          contents: `export default "${publicUrl}";`,
+          loader: "js",
+        };
+      });
+    },
+  };
+}
+
+/**
  * Build Bun.build transpile options consistently
  */
 export async function transpileForBrowser(
@@ -60,13 +166,20 @@ export async function transpileForBrowser(
   } = {}
 ): Promise<{ success: boolean; output?: string; logs?: any[] }> {
   const singletonPlugin = getReactSingletonPlugin();
+  const assetLoaderPlugin = createAssetLoaderPlugin();
+
+  const plugins = [assetLoaderPlugin];
+  if (singletonPlugin) {
+    plugins.push(singletonPlugin);
+  }
+
   const transpiled = await Bun.build({
     entrypoints,
     target: "browser",
     format: "esm",
     minify: options.minify ?? false,
     external: options.external ?? [],
-    plugins: singletonPlugin ? [singletonPlugin] : undefined,
+    plugins,
   });
 
   if (transpiled.success && transpiled.outputs[0]) {

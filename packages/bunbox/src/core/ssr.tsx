@@ -109,6 +109,20 @@ export async function renderPage(
         <meta charSet="UTF-8" />
         <meta name="viewport" content={metadata.viewport} />
         <title>{metadata.title}</title>
+        {metadata.favicon && (
+          <>
+            <link
+              rel="icon"
+              type={getFaviconContentType(metadata.favicon)}
+              href={`/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}`}
+            />
+            <link
+              rel="shortcut icon"
+              type={getFaviconContentType(metadata.favicon)}
+              href={`/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}`}
+            />
+          </>
+        )}
         {metadata.description && (
           <meta name="description" content={metadata.description} />
         )}
@@ -116,13 +130,6 @@ export async function renderPage(
           <meta name="keywords" content={metadata.keywords.join(", ")} />
         )}
         {metadata.author && <meta name="author" content={metadata.author} />}
-        {metadata.favicon && (
-          <link
-            rel="icon"
-            type={getFaviconContentType(metadata.favicon)}
-            href="/__bunbox/favicon"
-          />
-        )}
         <link rel="stylesheet" href="/__bunbox/styles.css" />
       </head>
       <body>
@@ -169,7 +176,10 @@ export function generateHTMLShell(
   const faviconTag = merged.favicon
     ? `\n    <link rel="icon" type="${getFaviconContentType(
         merged.favicon
-      )}" href="/__bunbox/favicon" />`
+      )}" href="/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}" />
+    <link rel="shortcut icon" type="${getFaviconContentType(
+      merged.favicon
+    )}" href="/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}" />`
     : "";
 
   // Build HMR script

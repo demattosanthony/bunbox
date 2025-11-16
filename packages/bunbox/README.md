@@ -1,5 +1,7 @@
 # 📦 Bunbox
 
+[![npm version](https://img.shields.io/npm/v/@ademattos/bunbox.svg)](https://www.npmjs.com/package/@ademattos/bunbox)
+
 A minimal full-stack framework for Bun. Create files in `app/` and they become routes - pages, APIs, socket servers, and workers.
 
 ## What You Get
@@ -12,7 +14,6 @@ A minimal full-stack framework for Bun. Create files in `app/` and they become r
 - **Workers**: Background tasks and long-running processes
 - **TypeScript**: Full type safety, zero config
 - **Fast**: Powered by Bun's native HTTP server
-- **Tiny**: Only 2,449 lines of core code
 
 ## 🚀 Quick Start
 
