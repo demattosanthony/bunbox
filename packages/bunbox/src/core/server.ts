@@ -29,7 +29,7 @@ import {
 import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
 import { getTopicFromRoute } from "./server/path-utils";
-import type { Server } from "bun";
+import type { BunFile, Server } from "bun";
 import type {
   Route,
   BunboxRequest,
@@ -65,6 +65,13 @@ export type {
  */
 function getCacheControl(development: boolean, maxAge: number = 3600): string {
   return development ? "no-cache" : `public, max-age=${maxAge}`;
+}
+
+/**
+ * Generate ETag from file metadata
+ */
+function generateETag(file: BunFile): string {
+  return `"${file.size}-${file.lastModified}"`;
 }
 
 class BunboxServer {
@@ -724,13 +731,36 @@ class BunboxServer {
           const file = Bun.file(join(this.config.publicDir, url.pathname));
 
           if (await file.exists()) {
+            const etag = generateETag(file);
+
+            // Check ETag for 304 response
+            if (req.headers.get("if-none-match") === etag) {
+              return new Response(null, { status: 304 });
+            }
+
             const headers: Record<string, string> = {
               "Cache-Control": getCacheControl(this.config.development),
+              ETag: etag,
             };
 
             // Ensure UTF-8 encoding for text files
             if (file.type.startsWith("text/")) {
               headers["Content-Type"] = `${file.type}; charset=utf-8`;
+            }
+
+            // Compress compressible content types
+            const compressibleTypes =
+              /^(text\/|application\/(json|javascript|xml)|image\/svg\+xml)/;
+            const acceptEncoding = req.headers.get("accept-encoding") || "";
+
+            if (
+              compressibleTypes.test(file.type) &&
+              acceptEncoding.includes("gzip")
+            ) {
+              const content = await file.arrayBuffer();
+              const compressed = Bun.gzipSync(new Uint8Array(content));
+              headers["Content-Encoding"] = "gzip";
+              return new Response(compressed, { headers });
             }
 
             return new Response(file, { headers });
