@@ -8,6 +8,7 @@ export default function Home() {
 
       <div className="links">
         <a href="/about">About</a>
+        <a href="/users">useQuery Demo</a>
         <a href="/chat">WebSockets</a>
         <a href="/ssr-example?name=John">SSR Page</a>
         <a

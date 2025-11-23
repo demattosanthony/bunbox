@@ -28,7 +28,6 @@ import {
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
-import { getTopicFromRoute } from "./server/path-utils";
 import type { BunFile, Server } from "bun";
 import type {
   Route,
@@ -41,6 +40,7 @@ import type {
   WebSocketData,
   WebSocketContext,
   PageMetadata,
+  PageModule,
   LayoutModule,
   SocketRouteModule,
   SocketUser,
@@ -72,6 +72,16 @@ function getCacheControl(development: boolean, maxAge: number = 3600): string {
  */
 function generateETag(file: BunFile): string {
   return `"${file.size}-${file.lastModified}"`;
+}
+
+/**
+ * Extract topic name from route filepath
+ * Examples:
+ *   sockets/chat/route.ts -> sockets/chat
+ *   ws/notifications/route.ts -> ws/notifications
+ */
+function getTopicFromRoute(filepath: string): string {
+  return filepath.replace(/\/route\.(tsx?|jsx?)$/, "");
 }
 
 class BunboxServer {
@@ -308,7 +318,7 @@ class BunboxServer {
     }
 
     try {
-      const layoutModule = await dynamicImport(
+      const layoutModule = await dynamicImport<LayoutModule>(
         this.rootLayoutPath,
         this.config.development
       );
@@ -571,7 +581,7 @@ class BunboxServer {
   /**
    * Parse request body based on Content-Type
    */
-  private async parseRequestBody(req: Request): Promise<any> {
+  private async parseRequestBody(req: Request): Promise<unknown> {
     // Skip body parsing for methods that typically don't have bodies
     if (
       req.method === "GET" ||
@@ -597,7 +607,7 @@ class BunboxServer {
         return text ? Object.fromEntries(new URLSearchParams(text)) : null;
       } else if (contentType.includes("multipart/form-data")) {
         const formData = await req.formData();
-        const result: Record<string, any> = {};
+        const result: Record<string, unknown> = {};
         formData.forEach((value, key) => {
           result[key] = value;
         });
@@ -668,7 +678,7 @@ class BunboxServer {
 
     try {
       const absolutePagePath = resolveAbsolutePath(pagePath);
-      const pageModule = await dynamicImport(
+      const pageModule = await dynamicImport<PageModule>(
         absolutePagePath,
         this.config.development
       );
@@ -683,7 +693,10 @@ class BunboxServer {
           const layoutPath = join(this.config.appDir, this.layouts.get(path)!);
           const absoluteLayoutPath = resolveAbsolutePath(layoutPath);
           layoutModules.push(
-            await dynamicImport(absoluteLayoutPath, this.config.development)
+            await dynamicImport<LayoutModule>(
+              absoluteLayoutPath,
+              this.config.development
+            )
           );
         }
       }
@@ -979,7 +992,7 @@ class BunboxServer {
 
       // Extract user data from URL query parameters
       const url = new URL(req.url);
-      const userData: Record<string, any> = {};
+      const userData: Record<string, string> = {};
 
       // Add all query params as user data
       url.searchParams.forEach((value, key) => {

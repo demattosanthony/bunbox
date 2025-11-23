@@ -1,36 +1,55 @@
 /**
- * API Route Examples - Fully typed params, query, body, response
+ * API Route Examples using the new fluent route builder.
  */
 
-import { api } from "@ademattos/bunbox";
+import { route } from "@ademattos/bunbox";
+import { z } from "zod";
 
-// Simple GET with typed response
-export const GET = api<any, any, any, { message: string; timestamp: string }>(
-  (req) => ({
-    message: "Simple route, fully typed",
-    timestamp: new Date().toISOString(),
-  })
-);
+// 1) Simple GET with typed query params
+const QuerySchema = z.object({
+  filter: z.string().default("all"),
+});
 
-// POST with typed body and response
-export const POST = api<
-  any,
-  any,
-  { name: string; email: string },
-  { id: string; name: string; email: string }
->((req) => ({
-  id: Math.random().toString(36).substring(7),
-  name: req.body.name,
-  email: req.body.email,
+export const GET = route.query(QuerySchema).handle(({ query }) => ({
+  message: "Simple route, fully typed",
+  filter: query.filter,
+  timestamp: new Date().toISOString(),
 }));
 
-// PUT with typed body and response
-export const PUT = api<
-  any,
-  any,
-  { title: string; content: string },
-  { success: boolean; updated: { title: string; content: string } }
->((req) => ({
+// 2) Shared middleware (auth) that augments the context
+const withAuth = route.use(() => {
+  // You could verify a token here. We'll just fake a user.
+  return {
+    user: {
+      id: "user_123",
+      name: "Alice",
+      roles: ["admin"],
+    },
+  };
+});
+
+// 3) Typed POST body
+const CreateUserSchema = z.object({
+  name: z.string().min(2),
+  email: z.email(),
+});
+
+export const POST = withAuth
+  .body(CreateUserSchema)
+  .handle(({ body, user }) => ({
+    id: Math.random().toString(36).substring(7),
+    ...body,
+    createdBy: user.name,
+  }));
+
+// 4) PUT route using both auth middleware and typed body
+const UpdateSchema = z.object({
+  title: z.string().min(3),
+  content: z.string().min(10),
+});
+
+export const PUT = withAuth.body(UpdateSchema).handle(({ body, user }) => ({
   success: true,
-  updated: req.body,
+  updated: body,
+  editor: user.name,
 }));

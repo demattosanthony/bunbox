@@ -4,6 +4,16 @@ import type {
   SocketMessage,
 } from "@ademattos/bunbox";
 
+interface ChatMessage {
+  text: string;
+  username: string;
+}
+
+interface TypingMessage {
+  isTyping: boolean;
+  username: string;
+}
+
 export function onJoin(user: SocketUser, ctx: SocketContext) {
   console.log(`User ${user.data.username || user.id} (${user.id}) joined chat`);
   ctx.broadcast("user-joined", { username: user.data.username || user.id });
@@ -18,13 +28,15 @@ export function onMessage(
   console.log(`Message from ${user.data.username || user.id}:`, message);
 
   if (message.type === "chat-message") {
+    const data = message.data as ChatMessage;
     ctx.broadcast("chat-message", {
-      text: message.data.text,
+      text: data.text,
       username: user.data.username || user.id,
     });
   } else if (message.type === "typing") {
+    const data = message.data as TypingMessage;
     ctx.broadcast("typing", {
-      isTyping: message.data.isTyping,
+      isTyping: data.isTyping,
       username: user.data.username || user.id,
     });
   }
@@ -38,7 +50,7 @@ export function onLeave(user: SocketUser, ctx: SocketContext) {
 
 export function onAuthorize(
   req: Request,
-  userData: Record<string, any>
+  userData: Record<string, string>
 ): boolean {
   if (
     userData.username &&

@@ -7,7 +7,7 @@ import type { Protocol } from "./protocol";
 /**
  * Socket message received from server
  */
-interface SocketMessage<T = any> {
+export interface SocketMessage<T = unknown> {
   type: string;
   data: T;
   timestamp: number;
@@ -17,20 +17,20 @@ interface SocketMessage<T = any> {
 /**
  * Event listener type
  */
-type EventListener<T = any> = (message: SocketMessage<T>) => void;
+type EventListener<T = unknown> = (message: SocketMessage<T>) => void;
 
 /**
  * SocketClient for connecting to socket servers with type-safe protocols
  */
-export class SocketClient<P extends Protocol = any> {
+export class SocketClient<P extends Protocol = Protocol> {
   private ws: WebSocket | null = null;
   private url: string;
-  private userData: Record<string, any>;
+  private userData: Record<string, unknown>;
   private listeners: Map<string, Set<EventListener>> = new Map();
   private connected = false;
   private closeResolver: (() => void) | null = null;
 
-  constructor(url: string, protocol: P, userData?: Record<string, any>) {
+  constructor(url: string, protocol: P, userData?: Record<string, unknown>) {
     // Convert relative URL to absolute WebSocket URL
     if (url.startsWith("/")) {
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -87,7 +87,7 @@ export class SocketClient<P extends Protocol = any> {
     this.ws.onclose = () => {
       this.connected = false;
       this.ws = null;
-      // Resolve any pending close promise
+      // Resolve pending close promise
       if (this.closeResolver) {
         this.closeResolver();
         this.closeResolver = null;

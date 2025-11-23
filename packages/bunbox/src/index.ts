@@ -45,4 +45,4 @@ export type {
 export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";
 
-export { api, json, error } from "./core/route";
+export { json, error, route } from "./core/route";

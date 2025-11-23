@@ -111,7 +111,8 @@ describe("generator", () => {
       await mkdir(join(APP_DIR, "blog", "[slug]"), { recursive: true });
       await writeFile(
         join(APP_DIR, "blog", "[slug]", "page.tsx"),
-        `export default function Post({ params }: any) { return <h1>{params.slug}</h1>; }`
+        `type PostProps = { params: { slug: string } };
+export default function Post({ params }: PostProps) { return <h1>{params.slug}</h1>; }`
       );
 
       const originalCwd = process.cwd();
@@ -137,7 +138,9 @@ describe("generator", () => {
       );
       await writeFile(
         join(APP_DIR, "layout.tsx"),
-        `export default function Layout({ children }: any) { return <div>{children}</div>; }`
+        `import type { ReactNode } from "react";
+type LayoutProps = { children: ReactNode };
+export default function Layout({ children }: LayoutProps) { return <div>{children}</div>; }`
       );
 
       const originalCwd = process.cwd();
@@ -281,7 +284,7 @@ describe("generator", () => {
 
         // Should have health endpoint
         expect(apiClientContent).toContain("health: {");
-        expect(apiClientContent).toContain("GET: (opts?:");
+        expect(apiClientContent).toContain("GET: createApiMethod");
       } finally {
         process.chdir(originalCwd);
       }
@@ -308,9 +311,9 @@ export const DELETE = () => new Response("DELETE");`
 
         // Should have all methods
         expect(apiClientContent).toContain("users: {");
-        expect(apiClientContent).toContain("GET: (opts?:");
-        expect(apiClientContent).toContain("POST: (opts?:");
-        expect(apiClientContent).toContain("DELETE: (opts?:");
+        expect(apiClientContent).toContain("GET: createApiMethod");
+        expect(apiClientContent).toContain("POST: createApiMethod");
+        expect(apiClientContent).toContain("DELETE: createApiMethod");
       } finally {
         process.chdir(originalCwd);
       }
@@ -336,7 +339,7 @@ export const DELETE = () => new Response("DELETE");`
         // Should have nested structure
         expect(apiClientContent).toContain("v1: {");
         expect(apiClientContent).toContain("users: {");
-        expect(apiClientContent).toContain("GET: (opts?:");
+        expect(apiClientContent).toContain("GET: createApiMethod");
       } finally {
         process.chdir(originalCwd);
       }
@@ -362,19 +365,22 @@ export const DELETE = () => new Response("DELETE");`
         // Should have dynamic segment (using :id format for Bun router)
         expect(apiClientContent).toContain("users: {");
         expect(apiClientContent).toContain('":id": {');
-        expect(apiClientContent).toContain("GET: (opts?:");
+        expect(apiClientContent).toContain("GET: createApiMethod");
       } finally {
         process.chdir(originalCwd);
       }
     });
 
     test("generates type aliases for typed API routes", async () => {
-      // Create typed API route using api() wrapper
+      // Create typed API route using route builder
       await mkdir(join(APP_DIR, "api", "users"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "users", "route.ts"),
-        `import { api } from "bunbox";
-export const GET = api<{}, {}, {}, { users: string[] }>(() => ({ users: [] }));`
+        `import { route } from "bunbox";
+const UsersSchema = { parse: () => ({ users: [] as string[] }) };
+export const GET = route
+  .body(UsersSchema)
+  .handle(({ body }) => body);`
       );
 
       const originalCwd = process.cwd();
@@ -414,7 +420,7 @@ export const GET = api<{}, {}, {}, { users: string[] }>(() => ({ users: [] }));`
         const apiClientContent = await apiClientFile.text();
 
         // Path should be relative to /api
-        expect(apiClientContent).toContain("GET: (opts?:");
+        expect(apiClientContent).toContain("GET: createApiMethod");
         expect(apiClientContent).toContain('"/api/root"');
       } finally {
         process.chdir(originalCwd);
@@ -519,13 +525,104 @@ export const GET = api<{}, {}, {}, { users: string[] }>(() => ({ users: [] }));`
         const apiClientContent = await apiClientFile.text();
 
         // Should have request function with all features
-        expect(apiClientContent).toContain("async function request<T>");
+        expect(apiClientContent).toContain(
+          "async function request<TResponse, TParams = Record<string, unknown>, TQuery = Record<string, unknown>, TBody = unknown>"
+        );
         expect(apiClientContent).toContain("opts?.params");
         expect(apiClientContent).toContain("opts?.query");
         expect(apiClientContent).toContain("opts?.body");
         expect(apiClientContent).toContain("opts?.headers");
         expect(apiClientContent).toContain("JSON.stringify(opts.body)");
         expect(apiClientContent).toContain("if (!res.ok) throw new Error");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    test("generates useQuery imports and types", async () => {
+      // Create simple API route
+      await mkdir(join(APP_DIR, "api", "test"), { recursive: true });
+      await writeFile(
+        join(APP_DIR, "api", "test", "route.ts"),
+        `export const GET = () => new Response("TEST");`
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(TEST_DIR);
+
+      try {
+        await generateApiClient(APP_DIR);
+
+        const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
+        const apiClientContent = await apiClientFile.text();
+
+        // Should import useQuery utilities
+        expect(apiClientContent).toContain("import { createQueryHook }");
+        expect(apiClientContent).toContain("useQuery");
+        expect(apiClientContent).toContain(
+          "import type { UseQueryOptions, UseQueryResult }"
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    test("generates createApiMethod helper function", async () => {
+      // Create simple API route
+      await mkdir(join(APP_DIR, "api", "data"), { recursive: true });
+      await writeFile(
+        join(APP_DIR, "api", "data", "route.ts"),
+        `export const GET = () => new Response("DATA");`
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(TEST_DIR);
+
+      try {
+        await generateApiClient(APP_DIR);
+
+        const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
+        const apiClientContent = await apiClientFile.text();
+
+        // Should have createApiMethod helper
+        expect(apiClientContent).toContain("function createApiMethod");
+        expect(apiClientContent).toContain("fn.useQuery =");
+        expect(apiClientContent).toContain("createQueryHook<TResponse>");
+
+        // Should have type definitions
+        expect(apiClientContent).toContain("type ApiMethod<");
+        expect(apiClientContent).toContain("type ApiMethodOptions<");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    test("generates API methods with useQuery support", async () => {
+      // Create API route
+      await mkdir(join(APP_DIR, "api", "items"), { recursive: true });
+      await writeFile(
+        join(APP_DIR, "api", "items", "route.ts"),
+        `export const GET = () => new Response("ITEMS");
+export const POST = () => new Response("CREATED");`
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(TEST_DIR);
+
+      try {
+        await generateApiClient(APP_DIR);
+
+        const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
+        const apiClientContent = await apiClientFile.text();
+
+        // Should generate methods using createApiMethod
+        expect(apiClientContent).toContain("items: {");
+        expect(apiClientContent).toContain(
+          'GET: createApiMethod<Route0_GET_Response, Route0_GET_Params, Route0_GET_Query, Route0_GET_Body>("GET", "/api/items")'
+        );
+        expect(apiClientContent).toContain(
+          'POST: createApiMethod<Route0_POST_Response, Route0_POST_Params, Route0_POST_Query, Route0_POST_Body>("POST", "/api/items")'
+        );
       } finally {
         process.chdir(originalCwd);
       }

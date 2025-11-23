@@ -79,126 +79,76 @@ export default function BlogPost({ params, query }: PageProps) {
 
 ## API Routes
 
-Bunbox provides an ultra-minimal API with full type safety and auto-generated typed client.
+Bunbox ships a fluent `route` builder for defining fully typed handlers with minimal syntax.
 
 ### Simple API Route
 
 ```typescript
 // app/api/hello/route.ts
-import { api } from "@ademattos/bunbox";
+import { route } from "@ademattos/bunbox";
 
-export const GET = api((req) => ({
+export const GET = route.handle(() => ({
   message: "Hello World",
   timestamp: new Date().toISOString(),
 }));
 ```
 
-That's it! 3 lines for a fully typed endpoint.
+### Typed Params, Query, and Body
 
-### With Type Parameters (Optional)
-
-For even better type safety, specify types for params, query, body, and response:
+Bring your own validator (Zod, Valibot, custom) and Bunbox will infer the types end-to-end.
 
 ```typescript
-// app/api/users/route.ts
-import { api } from "@ademattos/bunbox";
+import { route } from "@ademattos/bunbox";
+import { z } from "zod";
 
-// Full type safety: api<Params, Query, Body, Response>
-export const POST = api<
-  any,
-  any,
-  { name: string; email: string }, // Body type
-  { id: string; name: string; email: string } // Response type
->((req) => ({
-  id: Math.random().toString(36).substring(7),
-  name: req.body.name,
-  email: req.body.email,
-}));
+const Params = z.object({ id: z.string() });
+const Query = z.object({ filter: z.string().optional() });
+const Body = z.object({ name: z.string(), email: z.string().email() });
 
-export const GET = api<
-  { id: string }, // Params type
-  any,
-  any,
-  { id: string; name: string }
->((req) => ({
-  id: req.params.id,
-  name: "John Doe",
+export const POST = route
+  .params(Params)
+  .query(Query)
+  .body(Body)
+  .handle(({ params, query, body }) => ({
+    id: params.id,
+    filter: query.filter ?? "all",
+    created: body,
+  }));
+```
+
+### Shared Middleware
+
+Compose reusable procedures with `use()`:
+
+```typescript
+const withAuth = route.use((ctx) => {
+  const token = ctx.headers.get("Authorization");
+  if (!token) throw new Error("Unauthorized");
+  return { user: { id: "user_123" } };
+});
+
+export const GET = withAuth.handle(({ user }) => ({
+  message: `Welcome ${user.id}`,
 }));
 ```
 
 ### Auto-Generated Typed Client
 
-Bunbox automatically generates a fully typed API client:
+Bunbox still generates `.bunbox/api-client.ts`, exposing a fully typed `api` object that mirrors your file system routes:
 
 ```typescript
 import { api } from "./.bunbox/api-client";
 
-// TypeScript knows all types!
 const user = await api.users.POST({
-  body: {
-    name: "Alice",
-    email: "alice@example.com",
-  },
-});
-
-console.log(user.id); // ✅ TypeScript knows: string
-console.log(user.name); // ✅ TypeScript knows: string
-console.log(user.email); // ✅ TypeScript knows: string
-
-// ❌ TypeScript errors on wrong types
-await api.users.POST({
-  body: { name: 123 }, // Error: number not assignable to string
-});
-
-// Query params, path params - all typed
-const result = await api.users.GET({
   params: { id: "123" },
-  query: { filter: "active" },
+  body: { name: "Alice", email: "alice@example.com" },
 });
-```
-
-### With Route Parameters
-
-```typescript
-// app/api/users/[id]/route.ts
-import { api, type BunboxRequest } from "@ademattos/bunbox";
-
-export const GET = api((req: BunboxRequest) => {
-  const { id } = req.params;
-  return { id, name: "User " + id };
-});
-
-export const DELETE = api((req: BunboxRequest) => {
-  const { id } = req.params;
-  return { deleted: true, id };
-});
-```
-
-### Response Helpers
-
-```typescript
-import { api, json, error } from "@ademattos/bunbox";
-
-// json() helper
-export const GET = api((req) => {
-  return { data: "hello" }; // Automatically wrapped with json()
-});
-
-// Manual Response for custom headers/status
-export async function POST(req: BunboxRequest) {
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 201,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 ```
 
 ### Validation
 
-Bunbox doesn't include validation - use Zod, Yup, or any library you prefer:
-
 ```typescript
-import { api } from "@ademattos/bunbox";
+import { route } from "@ademattos/bunbox";
 import { z } from "zod";
 
 const userSchema = z.object({
@@ -206,15 +156,68 @@ const userSchema = z.object({
   email: z.string().email(),
 });
 
-export const POST = api(async (req) => {
-  // Validate with Zod
-  const data = userSchema.parse(req.body);
+export const POST = route.body(userSchema).handle(({ body }) => ({
+  id: "123",
+  ...body,
+}));
+```
 
-  return {
-    id: "123",
-    ...data,
-  };
+### React Hooks with useQuery
+
+Every API method automatically includes a `.useQuery()` hook for React components. This provides loading states, error handling, caching, and refetching out of the box.
+
+```tsx
+// In a React component
+import { api } from "./.bunbox/api-client";
+
+function UserProfile({ userId }: { userId: string }) {
+  const { data, loading, error, refetch } = api.users.GET.useQuery({
+    params: { id: userId },
+    enabled: !!userId, // conditional fetching
+  });
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return (
+    <div>
+      <h1>{data?.name}</h1>
+      <button onClick={refetch}>Refresh</button>
+    </div>
+  );
+}
+```
+
+**Features:**
+
+- **Loading states**: `loading` boolean tracks request status
+- **Error handling**: `error` contains any fetch errors
+- **Caching**: Responses are cached automatically
+- **Refetch**: Manual refetch via `refetch()` function
+- **Conditional fetching**: Use `enabled: false` to skip the request
+
+**Query options:**
+
+```tsx
+const { data, loading, error, refetch } = api.posts.GET.useQuery({
+  params: { id: "123" },      // URL params
+  query: { filter: "recent" }, // Query string params
+  body: { data: "..." },       // Request body (POST/PUT/PATCH)
+  headers: { ... },            // Custom headers
+  enabled: true,               // Whether to fetch (default: true)
 });
+```
+
+**Cache management:**
+
+```typescript
+import { clearQueryCache, clearQueryCacheKey } from "@ademattos/bunbox/client";
+
+// Clear entire cache
+clearQueryCache();
+
+// Clear specific query
+clearQueryCacheKey("GET", "/api/users", { params: { id: "123" } });
 ```
 
 ## Socket Servers
@@ -273,7 +276,7 @@ export function onLeave(user: SocketUser, ctx: SocketContext) {
 // Optional: Authorize connections
 export function onAuthorize(
   req: Request,
-  userData: Record<string, any>
+  userData: Record<string, string>
 ): boolean {
   // Validate user data before allowing connection
   return true;
@@ -402,7 +405,7 @@ bun dev
 - **Minimal**: Only 2,449 lines of core code
 - **Typed**: Fully typed API client with params, query, body, response
 - **Fast**: Built on Bun's native HTTP server
-- **Simple**: `export const GET = api((req) => ({ ... }))` - that's it
+- **Simple**: `export const GET = route.handle(() => ({ ... }))` - that's it
 - **Flexible**: Bring your own validation library (Zod, Yup, etc.)
 - **Zero config**: Works out of the box
 

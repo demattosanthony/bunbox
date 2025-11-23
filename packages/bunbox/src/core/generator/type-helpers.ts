@@ -17,19 +17,19 @@ export interface ApiRouteTreeNode {
 }
 
 /**
- * Generate type aliases extracting all types from api() generics
+ * Generate type aliases extracted from route builder metadata
  */
 export function generateTypeAliases(node: ApiRouteTreeNode): string[] {
   const lines: string[] = [];
 
   function traverse(obj: ApiRouteTreeNode) {
     for (const meta of obj.methods) {
-      // Extract all types from api<Params, Query, Body, Response>
+      // Extract all types from route.handle chains (params/query/body/response)
       lines.push(
-        `type ${meta.typeAlias}_Params = typeof ${meta.importName}.${meta.method} extends { __types: { params: infer T } } ? T : any;`,
-        `type ${meta.typeAlias}_Query = typeof ${meta.importName}.${meta.method} extends { __types: { query: infer T } } ? T : any;`,
-        `type ${meta.typeAlias}_Body = typeof ${meta.importName}.${meta.method} extends { __types: { body: infer T } } ? T : any;`,
-        `type ${meta.typeAlias}_Response = typeof ${meta.importName}.${meta.method} extends { __types: { response: infer T } } ? T : any;`
+        `type ${meta.typeAlias}_Params = typeof ${meta.importName}.${meta.method} extends { __types: { params: infer T } } ? T : Record<string, unknown>;`,
+        `type ${meta.typeAlias}_Query = typeof ${meta.importName}.${meta.method} extends { __types: { query: infer T } } ? T : Record<string, unknown>;`,
+        `type ${meta.typeAlias}_Body = typeof ${meta.importName}.${meta.method} extends { __types: { body: infer T } } ? T : unknown;`,
+        `type ${meta.typeAlias}_Response = typeof ${meta.importName}.${meta.method} extends { __types: { response: infer T } } ? T : unknown;`
       );
     }
 
@@ -55,7 +55,7 @@ export function buildApiObject(
 
   for (const meta of node.methods) {
     blocks.push([
-      `${indentStr}${meta.method}: (opts?: { params?: ${meta.typeAlias}_Params; query?: ${meta.typeAlias}_Query; body?: ${meta.typeAlias}_Body; headers?: HeadersInit }) => request<${meta.typeAlias}_Response>("${meta.method}", "${meta.path}", opts)`,
+      `${indentStr}${meta.method}: createApiMethod<${meta.typeAlias}_Response, ${meta.typeAlias}_Params, ${meta.typeAlias}_Query, ${meta.typeAlias}_Body>("${meta.method}", "${meta.path}")`,
     ]);
   }
 

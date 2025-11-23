@@ -19,7 +19,7 @@ export function getErrorMessage(error: unknown): string {
 /**
  * Dynamically import a module with cache busting in development
  */
-export async function dynamicImport<T = any>(
+export async function dynamicImport<T = unknown>(
   path: string,
   development: boolean = false
 ): Promise<T> {
@@ -164,7 +164,7 @@ export async function transpileForBrowser(
     minify?: boolean;
     external?: string[];
   } = {}
-): Promise<{ success: boolean; output?: string; logs?: any[] }> {
+): Promise<{ success: boolean; output?: string; logs?: unknown[] }> {
   const singletonPlugin = getReactSingletonPlugin();
   const assetLoaderPlugin = createAssetLoaderPlugin();
 
@@ -277,9 +277,9 @@ function escapeRegExp(value: string): string {
 /**
  * Load Bun plugins from bunfig.toml (cached)
  */
-let cachedPlugins: any[] | null = null;
+let cachedPlugins: BunPlugin[] | null = null;
 
-export async function loadBunPlugins(): Promise<any[]> {
+export async function loadBunPlugins(): Promise<BunPlugin[]> {
   if (cachedPlugins) return cachedPlugins;
 
   const bunfigPath = join(process.cwd(), "bunfig.toml");
@@ -306,9 +306,11 @@ export async function loadBunPlugins(): Promise<any[]> {
     );
 
     cachedPlugins = results
-      .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled")
-      .map((r) => r.value.default)
-      .filter(Boolean);
+      .filter(
+        (r): r is PromiseFulfilledResult<{ default: BunPlugin }> =>
+          r.status === "fulfilled" && Boolean(r.value?.default)
+      )
+      .map((r) => r.value.default);
 
     return cachedPlugins;
   } catch {

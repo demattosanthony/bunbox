@@ -225,9 +225,21 @@ function generateClientCode(
     lines.push("// Response types extracted from handlers", ...typeAliases, "");
   }
 
+  // Import React hooks for query functionality
+  const useQueryPath = join(import.meta.dir, "..", "client", "useQuery");
+  lines.push(
+    `import { createQueryHook } from "${useQueryPath}";`,
+    `import type { UseQueryOptions, UseQueryResult } from "${useQueryPath}";`,
+    ""
+  );
+
   // Add request function
   lines.push(
-    "async function request<T>(method: string, path: string, opts?: any): Promise<T> {",
+    "async function request<TResponse, TParams = Record<string, unknown>, TQuery = Record<string, unknown>, TBody = unknown>(",
+    "  method: string,",
+    "  path: string,",
+    "  opts?: { params?: TParams; query?: TQuery; body?: TBody; headers?: HeadersInit }",
+    "): Promise<TResponse> {",
     "  let url = path;",
     "  if (opts?.params) {",
     "    for (const [k, v] of Object.entries(opts.params)) url = url.replace(`[${k}]`, String(v));",
@@ -249,6 +261,26 @@ function generateClientCode(
     "  });",
     "  if (!res.ok) throw new Error(await res.text());",
     "  return res.json();",
+    "}",
+    ""
+  );
+
+  // Add helper to create API method with useQuery hook
+  lines.push(
+    "type ApiMethodOptions<TParams, TQuery, TBody> = { params?: TParams; query?: TQuery; body?: TBody; headers?: HeadersInit };",
+    "",
+    "type ApiMethod<TResponse, TParams, TQuery, TBody> = {",
+    "  (opts?: ApiMethodOptions<TParams, TQuery, TBody>): Promise<TResponse>;",
+    "  useQuery: (opts?: UseQueryOptions<TParams, TQuery, TBody>) => UseQueryResult<TResponse>;",
+    "};",
+    "",
+    "function createApiMethod<TResponse, TParams = Record<string, unknown>, TQuery = Record<string, unknown>, TBody = unknown>(",
+    "  method: string,",
+    "  path: string",
+    "): ApiMethod<TResponse, TParams, TQuery, TBody> {",
+    "  const fn = (opts?: ApiMethodOptions<TParams, TQuery, TBody>) => request<TResponse, TParams, TQuery, TBody>(method, path, opts);",
+    "  fn.useQuery = (opts?: UseQueryOptions<TParams, TQuery, TBody>) => createQueryHook<TResponse>(method, path, opts);",
+    "  return fn as ApiMethod<TResponse, TParams, TQuery, TBody>;",
     "}",
     ""
   );

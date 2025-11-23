@@ -4,6 +4,42 @@
  */
 
 import type React from "react";
+import type { Server } from "bun";
+
+export type RouteParams = Record<string, string>;
+export type RouteQuery = Record<string, string>;
+export type RouteExtras = Record<string, unknown>;
+export type EmptyExtras = Record<string, never>;
+
+/**
+ * Generic validation interface (compatible with Zod/Valibot/etc.)
+ */
+export interface Validator<T> {
+  parse: (input: unknown) => T;
+}
+
+/**
+ * Middleware function signature used by RouteBuilder
+ */
+export type Middleware<Ctx, Extra extends RouteExtras | void = void> = (
+  ctx: Ctx
+) => Extra | void | Promise<Extra | void>;
+
+/**
+ * Route handler context exposed to developers
+ */
+export type RouteContext<
+  Params extends Record<string, unknown> = RouteParams,
+  Query extends Record<string, unknown> = RouteQuery,
+  Body = unknown,
+  Extras extends RouteExtras = EmptyExtras
+> = BunboxRequest &
+  Extras & {
+    params: Params;
+    query: Query;
+    body: Body;
+    json: <T>(data: T, init?: number | ResponseInit) => Response;
+  };
 
 /**
  * Page metadata for HTML head tags
@@ -39,11 +75,11 @@ export interface Route {
  * Extended Request with route params, query, and parsed body
  * Available in API route handlers
  */
-export interface BunboxRequest extends Request {
-  params: Record<string, string>;
-  query: Record<string, string>;
-  body: any;
-}
+export type BunboxRequest = Omit<Request, "body"> & {
+  params: RouteParams;
+  query: RouteQuery;
+  body: unknown;
+};
 
 /**
  * API route handler function signature
@@ -100,7 +136,7 @@ export interface WebSocketContext {
     compress?: boolean
   ): number;
   /** Broadcast JSON data to all subscribers on this route (includes sender) */
-  broadcastJSON(data: any, compress?: boolean): number;
+  broadcastJSON(data: unknown, compress?: boolean): number;
 }
 
 /**
@@ -109,7 +145,7 @@ export interface WebSocketContext {
 export interface WsRouteModule {
   upgrade?: (
     req: Request
-  ) => boolean | { data?: any } | Promise<boolean | { data?: any }>;
+  ) => boolean | { data?: unknown } | Promise<boolean | { data?: unknown }>;
   onOpen?: (ws: ServerWebSocket, ctx: WebSocketContext) => void | Promise<void>;
   onMessage?: (
     ws: ServerWebSocket,
@@ -202,13 +238,13 @@ export interface SocketUser {
   /** Server-assigned unique user ID */
   id: string;
   /** Custom user data */
-  data: Record<string, any>;
+  data: RouteExtras;
 }
 
 /**
  * Structured socket message
  */
-export interface SocketMessage<T = any> {
+export interface SocketMessage<T = unknown> {
   /** Message type identifier */
   type: string;
   /** Message payload */
@@ -225,9 +261,9 @@ export interface SocketMessage<T = any> {
  */
 export interface SocketContext {
   /** Broadcast message to all connected users */
-  broadcast<T = any>(type: string, data: T): void;
+  broadcast<T = unknown>(type: string, data: T): void;
   /** Send message to specific user */
-  sendTo<T = any>(userId: string, type: string, data: T): void;
+  sendTo<T = unknown>(userId: string, type: string, data: T): void;
   /** Get all connected users */
   getUsers(): SocketUser[];
 }
@@ -249,7 +285,7 @@ export interface SocketRouteModule {
   /** Optional authorization check before connection */
   onAuthorize?: (
     req: Request,
-    userData: Record<string, any>
+    userData: Record<string, string>
   ) => boolean | Promise<boolean>;
 }
 
@@ -285,12 +321,12 @@ export interface BunboxServerConfig {
   workerCleanup: () => Promise<void>;
   fetch: (
     req: Request,
-    server: any
+    server: Server<WebSocketData>
   ) => Response | Promise<Response | undefined>;
   websocket: {
-    open: (ws: any) => void;
-    message: (ws: any, message: string | Buffer) => void;
-    close: (ws: any, code?: number, reason?: string) => void;
+    open: (ws: ServerWebSocket) => void;
+    message: (ws: ServerWebSocket, message: string | Buffer) => void;
+    close: (ws: ServerWebSocket, code?: number, reason?: string) => void;
   };
   development?:
     | {

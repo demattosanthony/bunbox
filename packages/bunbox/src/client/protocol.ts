@@ -5,7 +5,7 @@
 /**
  * Protocol definition type - maps message type names to their data structures
  */
-export type Protocol = Record<string, any>;
+export type Protocol = Record<string, unknown>;
 
 /**
  * Define a type-safe protocol for socket communication

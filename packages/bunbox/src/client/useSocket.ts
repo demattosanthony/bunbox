@@ -4,6 +4,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { SocketClient } from "./socket";
+import type { SocketMessage } from "./socket";
 import type { Protocol } from "./protocol";
 
 /**
@@ -13,7 +14,7 @@ interface UseSocketReturn<P extends Protocol> {
   /** Subscribe to messages */
   subscribe: <K extends keyof P>(
     type: K,
-    callback: (message: any) => void
+    callback: (message: SocketMessage<P[K]>) => void
   ) => () => void;
   /** Publish messages */
   publish: <K extends keyof P>(type: K, data: P[K]) => void;
@@ -33,10 +34,15 @@ interface UseSocketReturn<P extends Protocol> {
  *   { username: "Alice" }
  * );
  */
+type SocketUserData = { username: string } & Record<
+  string,
+  string | number | boolean
+>;
+
 export function useSocket<P extends Protocol>(
   url: string,
   protocol: P,
-  userData: { username: string; [key: string]: any }
+  userData: SocketUserData
 ): UseSocketReturn<P> {
   const [connected, setConnected] = useState(false);
   const clientRef = useRef<SocketClient<P> | null>(null);
@@ -61,7 +67,10 @@ export function useSocket<P extends Protocol>(
 
   // Memoized subscribe function
   const subscribe = useCallback(
-    <K extends keyof P>(type: K, callback: (message: any) => void) => {
+    <K extends keyof P>(
+      type: K,
+      callback: (message: SocketMessage<P[K]>) => void
+    ) => {
       if (!clientRef.current) {
         return () => {};
       }

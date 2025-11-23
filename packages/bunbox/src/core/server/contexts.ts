@@ -29,7 +29,7 @@ export class WebSocketContextImpl implements WebSocketContext {
     return this.server.publish(this.topic, data, compress);
   }
 
-  broadcastJSON(data: any, compress?: boolean): number {
+  broadcastJSON(data: unknown, compress?: boolean): number {
     return this.server.publish(this.topic, JSON.stringify(data), compress);
   }
 }
@@ -45,7 +45,7 @@ export class SocketContextImpl implements SocketContext {
     private readonly users: Map<string, SocketUser>
   ) {}
 
-  broadcast<T = any>(type: string, data: T): void {
+  broadcast<T = unknown>(type: string, data: T): void {
     const message: SocketMessage<T> = {
       type,
       data,
@@ -55,7 +55,7 @@ export class SocketContextImpl implements SocketContext {
     this.server.publish(this.topic, JSON.stringify(message));
   }
 
-  sendTo<T = any>(userId: string, type: string, data: T): void {
+  sendTo<T = unknown>(userId: string, type: string, data: T): void {
     // Send to a specific user by iterating through subscriptions
     // Note: This is a simple implementation. For large scale, consider a userId->ws map
     const message: SocketMessage<T> = {

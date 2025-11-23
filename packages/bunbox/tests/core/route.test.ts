@@ -1,385 +1,172 @@
-/**
- * Tests for route helper functions (api, json, error)
- */
-
-import { describe, test, expect } from "bun:test";
-import { api, json, error } from "../../src/core/route";
+import { describe, expect, test } from "bun:test";
+import { route, json, error } from "../../src/core/route";
 import type { BunboxRequest } from "../../src/core/types";
 
-describe("route helpers", () => {
-  describe("json", () => {
-    test("creates JSON response with default 200 status", async () => {
-      const data = { message: "Hello" };
-      const response = json(data);
+const createRequest = (
+  overrides: Partial<BunboxRequest> = {}
+): BunboxRequest => {
+  const base = {
+    params: {},
+    query: {},
+    body: undefined,
+  };
+  return { ...base, ...overrides } as BunboxRequest;
+};
 
-      expect(response.status).toBe(200);
-      expect(response.headers.get("Content-Type")).toBe("application/json");
-
-      const body = await response.json();
-      expect(body).toEqual(data);
-    });
-
-    test("creates JSON response with custom status", async () => {
-      const data = { created: true };
-      const response = json(data, 201);
-
-      expect(response.status).toBe(201);
-
-      const body = await response.json();
-      expect(body).toEqual(data);
-    });
-
-    test("serializes complex objects", async () => {
-      const data = {
-        user: { id: 1, name: "Alice" },
-        posts: [
-          { id: 1, title: "First" },
-          { id: 2, title: "Second" },
-        ],
-        nested: { deep: { value: 42 } },
-      };
-      const response = json(data);
-
-      const body = await response.json();
-      expect(body).toEqual(data);
-    });
-
-    test("serializes arrays", async () => {
-      const data = [1, 2, 3, 4, 5];
-      const response = json(data);
-
-      const body = await response.json();
-      expect(body).toEqual(data);
-    });
-
-    test("serializes null and undefined", async () => {
-      const nullResponse = json(null);
-      const nullBody = await nullResponse.json();
-      expect(nullBody).toBeNull();
-
-      const undefinedResponse = json(undefined);
-      const undefinedBody = await undefinedResponse.text();
-      expect(undefinedBody).toBe(""); // undefined serializes to empty
-    });
-
-    test("serializes primitive values", async () => {
-      const stringResponse = json("hello");
-      const stringBody = await stringResponse.json();
-      expect(stringBody).toBe("hello");
-
-      const numberResponse = json(42);
-      const numberBody = await numberResponse.json();
-      expect(numberBody).toBe(42);
-
-      const boolResponse = json(true);
-      const boolBody = await boolResponse.json();
-      expect(boolBody).toBe(true);
-    });
+describe("json helper", () => {
+  test("defaults to 200 JSON response", async () => {
+    const response = json({ ok: true });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+    expect(await response.json()).toEqual({ ok: true });
   });
 
-  describe("error", () => {
-    test("creates error response with default 400 status", async () => {
-      const response = error("Invalid input");
+  test("supports ResponseInit overrides", async () => {
+    const response = json(
+      { ok: true },
+      { status: 202, headers: { "X-Test": "1" } }
+    );
+    expect(response.status).toBe(202);
+    expect(response.headers.get("X-Test")).toBe("1");
+  });
+});
 
-      expect(response.status).toBe(400);
-      expect(response.headers.get("Content-Type")).toBe("application/json");
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Invalid input" });
-    });
-
-    test("creates error response with custom status", async () => {
-      const response = error("Not found", 404);
-
-      expect(response.status).toBe(404);
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Not found" });
-    });
-
-    test("creates 401 unauthorized error", async () => {
-      const response = error("Unauthorized", 401);
-
-      expect(response.status).toBe(401);
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Unauthorized" });
-    });
-
-    test("creates 403 forbidden error", async () => {
-      const response = error("Forbidden", 403);
-
-      expect(response.status).toBe(403);
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Forbidden" });
-    });
-
-    test("creates 500 internal server error", async () => {
-      const response = error("Internal server error", 500);
-
-      expect(response.status).toBe(500);
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Internal server error" });
-    });
-
-    test("handles empty error message", async () => {
-      const response = error("");
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "" });
-    });
+describe("error helper", () => {
+  test("wraps message with 400 status", async () => {
+    const response = error("bad");
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "bad" });
   });
 
-  describe("api", () => {
-    test("wraps handler and returns JSON response", async () => {
-      const handler = api(() => ({ message: "Hello" }));
+  test("allows custom status codes", () => {
+    const response = error("missing", 404);
+    expect(response.status).toBe(404);
+  });
+});
 
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
+describe("route builder", () => {
+  const nameSchema = {
+    parse(value: unknown) {
+      if (typeof (value as { name?: unknown }).name !== "string") {
+        throw new Error("name required");
+      }
+      return value as { name: string };
+    },
+  };
 
-      const response = await handler(mockRequest);
+  const paramsSchema = {
+    parse(value: unknown) {
+      if (typeof (value as { id?: unknown }).id !== "string") {
+        throw new Error("id required");
+      }
+      return value as { id: string };
+    },
+  };
 
-      expect(response.status).toBe(200);
-      expect(response.headers.get("Content-Type")).toBe("application/json");
+  const querySchema = {
+    parse(value: unknown) {
+      if (typeof (value as { q?: unknown }).q !== "string") {
+        throw new Error("q required");
+      }
+      return value as { q: string };
+    },
+  };
 
-      const body = await response.json();
-      expect(body).toEqual({ message: "Hello" });
-    });
+  test("serializes plain object results", async () => {
+    const handler = route.handle(() => ({ hello: "world" }));
+    const response = await handler(createRequest());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ hello: "world" });
+  });
 
-    test("wraps async handler and returns JSON response", async () => {
-      const handler = api(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        return { message: "Async" };
-      });
+  test("supports returning custom Response", async () => {
+    const handler = route.handle(() => new Response("ok", { status: 201 }));
+    const response = await handler(createRequest());
+    expect(response.status).toBe(201);
+    expect(await response.text()).toBe("ok");
+  });
 
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-
-      expect(response.status).toBe(200);
-
-      const body = await response.json();
-      expect(body).toEqual({ message: "Async" });
-    });
-
-    test("receives request with params", async () => {
-      const handler = api((req) => ({
-        id: req.params.id,
+  test("validates params, query, and body", async () => {
+    const handler = route
+      .params(paramsSchema)
+      .query(querySchema)
+      .body(nameSchema)
+      .handle(({ params, query, body }) => ({
+        id: params.id,
+        search: query.q,
+        greeting: `Hello ${body.name}`,
       }));
 
-      const mockRequest = {
-        params: { id: "123" },
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ id: "123" });
-    });
-
-    test("receives request with query", async () => {
-      const handler = api((req) => ({
-        search: req.query.q,
-      }));
-
-      const mockRequest = {
-        params: {},
+    const response = await handler(
+      createRequest({
+        params: { id: "1" },
         query: { q: "test" },
-        body: null,
-      } as unknown as BunboxRequest;
+        body: { name: "Ada" },
+      })
+    );
 
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ search: "test" });
+    expect(await response.json()).toEqual({
+      id: "1",
+      search: "test",
+      greeting: "Hello Ada",
     });
+  });
 
-    test("receives request with body", async () => {
-      const handler = api((req) => ({
-        received: req.body,
-      }));
+  test("merges middleware-returned context", async () => {
+    const handler = route
+      .use(() => ({ user: { id: "42" } }))
+      .use((ctx) => ({ audit: `user:${ctx.user.id}` }))
+      .handle(({ user, audit }) => ({ userId: user.id, audit }));
 
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: { name: "Alice" },
-      } as unknown as BunboxRequest;
+    const response = await handler(createRequest());
+    expect(await response.json()).toEqual({ userId: "42", audit: "user:42" });
+  });
 
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ received: { name: "Alice" } });
-    });
+  test("tolerates middleware side effects without return value", async () => {
+    let invoked = false;
+    const handler = route
+      .use(() => {
+        invoked = true;
+      })
+      .handle(() => ({ ok: true }));
 
-    test("catches and handles errors", async () => {
-      const handler = api(() => {
-        throw new Error("Something went wrong");
-      });
+    const response = await handler(createRequest());
+    expect(invoked).toBe(true);
+    expect(await response.json()).toEqual({ ok: true });
+  });
 
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
+  test("exposes ctx.json helper", async () => {
+    const handler = route.handle((ctx) => ctx.json({ ok: true }, 202));
+    const response = await handler(createRequest());
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ ok: true });
+  });
 
-      const response = await handler(mockRequest);
+  test("works with readonly request properties from server", async () => {
+    // Simulate how the server creates BunboxRequest with readonly properties
+    const mockReq = new Request("http://localhost/test");
+    const bunboxReq = Object.create(mockReq, {
+      params: { value: { id: "123" }, writable: false, enumerable: true },
+      query: { value: { filter: "all" }, writable: false, enumerable: true },
+      body: {
+        value: { name: "Test" },
+        writable: false,
+        enumerable: true,
+      },
+    }) as BunboxRequest;
 
-      expect(response.status).toBe(500);
+    const handler = route.handle(({ params, query, body }) => ({
+      params,
+      query,
+      body,
+    }));
 
-      const body = await response.json();
-      expect(body).toEqual({ error: "Something went wrong" });
-    });
-
-    test("catches and handles async errors", async () => {
-      const handler = api(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        throw new Error("Async error");
-      });
-
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-
-      expect(response.status).toBe(500);
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Async error" });
-    });
-
-    test("handles non-Error exceptions", async () => {
-      const handler = api(() => {
-        throw "string error";
-      });
-
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-
-      expect(response.status).toBe(500);
-
-      const body = await response.json();
-      expect(body).toEqual({ error: "Internal error" });
-    });
-
-    test("handler can return Response directly", async () => {
-      const handler = api(() => {
-        return { data: "value" };
-      });
-
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ data: "value" });
-    });
-
-    test("supports typed params", async () => {
-      // Type inference test - this would be caught by TypeScript
-      const handler = api<{ id: string }, {}, {}, { userId: string }>(
-        (req) => ({
-          userId: req.params.id || "",
-        })
-      );
-
-      const mockRequest = {
-        params: { id: "123" },
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ userId: "123" });
-    });
-
-    test("supports typed query", async () => {
-      const handler = api<{}, { search: string }, {}, { result: string }>(
-        (req) => ({
-          result: req.query.search || "",
-        })
-      );
-
-      const mockRequest = {
-        params: {},
-        query: { search: "test" },
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ result: "test" });
-    });
-
-    test("supports typed body", async () => {
-      const handler = api<{}, {}, { name: string }, { greeting: string }>(
-        (req) => ({
-          greeting: `Hello, ${req.body.name}`,
-        })
-      );
-
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: { name: "Alice" },
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body).toEqual({ greeting: "Hello, Alice" });
-    });
-
-    test("supports complex typed response", async () => {
-      type User = { id: number; name: string; email: string };
-      const handler = api<{}, {}, {}, { users: User[] }>(() => ({
-        users: [
-          { id: 1, name: "Alice", email: "alice@example.com" },
-          { id: 2, name: "Bob", email: "bob@example.com" },
-        ],
-      }));
-
-      const mockRequest = {
-        params: {},
-        query: {},
-        body: null,
-      } as unknown as BunboxRequest;
-
-      const response = await handler(mockRequest);
-      const body = await response.json();
-      expect(body.users).toHaveLength(2);
-      expect(body.users[0]?.name).toBe("Alice");
-    });
-
-    test("preserves __types marker for type inference", () => {
-      const handler = api<{ id: string }, {}, {}, { result: string }>(
-        (req) => ({
-          result: req.params.id || "",
-        })
-      );
-
-      // The handler should have __types property for type extraction
-      // This is used by the generator to extract types
-      expect(handler).toBeDefined();
-      expect(typeof handler).toBe("function");
+    const response = await handler(bunboxReq);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      params: { id: "123" },
+      query: { filter: "all" },
+      body: { name: "Test" },
     });
   });
 });

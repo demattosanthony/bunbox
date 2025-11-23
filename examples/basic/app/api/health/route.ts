@@ -3,9 +3,9 @@
  * Ultra-minimal health check
  */
 
-import { api } from "@ademattos/bunbox";
+import { route } from "@ademattos/bunbox";
 
-export const GET = api((req) => ({
+export const GET = route.handle(() => ({
   status: "healthy",
   timestamp: new Date().toISOString(),
   uptime: process.uptime(),
