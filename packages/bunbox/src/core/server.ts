@@ -735,26 +735,28 @@ class BunboxServer {
 
             // Check ETag for 304 response
             if (req.headers.get("if-none-match") === etag) {
-              return new Response(null, { status: 304 });
+              return new Response(null, {
+                status: 304,
+                headers: { ETag: etag },
+              });
             }
+
+            const mimeType = file.type || "application/octet-stream";
 
             const headers: Record<string, string> = {
               "Cache-Control": getCacheControl(this.config.development),
               ETag: etag,
+              "Content-Type": mimeType.startsWith("text/")
+                ? `${mimeType}; charset=utf-8`
+                : mimeType,
             };
 
-            // Ensure UTF-8 encoding for text files
-            if (file.type.startsWith("text/")) {
-              headers["Content-Type"] = `${file.type}; charset=utf-8`;
-            }
-
-            // Compress compressible content types
             const compressibleTypes =
               /^(text\/|application\/(json|javascript|xml)|image\/svg\+xml)/;
             const acceptEncoding = req.headers.get("accept-encoding") || "";
 
             if (
-              compressibleTypes.test(file.type) &&
+              compressibleTypes.test(mimeType) &&
               acceptEncoding.includes("gzip")
             ) {
               const content = await file.arrayBuffer();
