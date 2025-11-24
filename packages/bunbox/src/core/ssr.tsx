@@ -6,6 +6,10 @@ import React from "react";
 import { renderToReadableStream } from "react-dom/server";
 import type { PageMetadata, PageModule, LayoutModule } from "./types";
 import { getFaviconContentType } from "./utils";
+import { SSRRouterContext } from "./shared.tsx";
+
+// Re-export for backwards compatibility
+export { SSRRouterContext };
 
 /**
  * HMR WebSocket client script for development hot reload
@@ -45,20 +49,55 @@ function mergeMetadata(
 }
 
 /**
- * Check if a file has "use server" directive
+ * Check if a file has a specific directive ("use server" or "use client")
  */
-export async function checkUseServer(filePath: string): Promise<boolean> {
+async function checkDirective(
+  filePath: string,
+  directive: "use server" | "use client"
+): Promise<boolean> {
   try {
     const file = Bun.file(filePath);
     if (!(await file.exists())) return false;
     const content = await file.text();
 
-    // Check for "use server" at the top of the file (within first few lines)
-    const lines = content.split("\n").slice(0, 5);
-    return lines.some((line) => line.trim().match(/^["']use server["'];?$/));
+    // Check for directive at the top of the file (within first few lines)
+    // Must be before any imports or code
+    const lines = content.split("\n").slice(0, 10);
+    const regex = new RegExp(`^["']${directive}["'];?$`);
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("/*")) {
+        continue;
+      }
+      // Check if this line has the directive
+      if (regex.test(trimmed)) {
+        return true;
+      }
+      // If we hit any other code, directive must come before it
+      if (trimmed && !trimmed.startsWith("import")) {
+        break;
+      }
+    }
+    return false;
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if a file has "use server" directive
+ */
+export async function checkUseServer(filePath: string): Promise<boolean> {
+  return checkDirective(filePath, "use server");
+}
+
+/**
+ * Check if a file has "use client" directive
+ */
+export async function checkUseClient(filePath: string): Promise<boolean> {
+  return checkDirective(filePath, "use client");
 }
 
 /**
@@ -69,7 +108,8 @@ export async function renderPage(
   layoutModules: LayoutModule[],
   params: Record<string, string>,
   query: Record<string, string>,
-  development: boolean = false
+  development: boolean = false,
+  pathname: string = "/"
 ): Promise<ReadableStream> {
   const PageComponent = pageModule.default;
 
@@ -96,6 +136,13 @@ export async function renderPage(
       content = React.createElement(LayoutComponent, { children: content });
     }
   }
+
+  // Wrap with SSR router context to provide pathname during SSR
+  content = React.createElement(
+    SSRRouterContext.Provider,
+    { value: { pathname, params } },
+    content
+  );
 
   // HMR script for development
   const hmrScript = development ? (

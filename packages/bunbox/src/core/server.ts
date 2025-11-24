@@ -26,7 +26,7 @@ import {
   getErrorMessage,
   loadBunPlugins,
 } from "./utils";
-import { getApplicableLayoutPaths } from "./shared";
+import { getApplicableLayoutPaths } from "./shared.tsx";
 import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
 import type { BunFile, Server } from "bun";
 import type {
@@ -706,7 +706,8 @@ class BunboxServer {
         layoutModules,
         match.params,
         match.query,
-        this.config.development
+        this.config.development,
+        urlPath
       );
 
       return new Response(stream, {

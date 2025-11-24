@@ -587,11 +587,15 @@ export const GET = route
         // Should have createApiMethod helper
         expect(apiClientContent).toContain("function createApiMethod");
         expect(apiClientContent).toContain("fn.useQuery =");
-        expect(apiClientContent).toContain("createQueryHook<TResponse>");
+        expect(apiClientContent).toContain("fn.useStream =");
+        expect(apiClientContent).toContain(
+          "createQueryHook<ClientResponse<TResponse>>"
+        );
 
         // Should have type definitions
         expect(apiClientContent).toContain("type ApiMethod<");
         expect(apiClientContent).toContain("type ApiMethodOptions<");
+        expect(apiClientContent).toContain("type ClientResponse<");
       } finally {
         process.chdir(originalCwd);
       }
@@ -622,6 +626,75 @@ export const POST = () => new Response("CREATED");`
         );
         expect(apiClientContent).toContain(
           'POST: createApiMethod<Route0_POST_Response, Route0_POST_Params, Route0_POST_Query, Route0_POST_Body>("POST", "/api/items")'
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    test("generates correct types for streaming responses", async () => {
+      // Create streaming API route
+      await mkdir(join(APP_DIR, "api", "stream"), { recursive: true });
+      await writeFile(
+        join(APP_DIR, "api", "stream", "route.ts"),
+        `import type { SSEResponse } from "bunbox";
+export const GET = (): SSEResponse<{ token: string }> => {
+  return null as any; // Mock implementation
+};`
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(TEST_DIR);
+
+      try {
+        await generateApiClient(APP_DIR);
+
+        const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
+        const apiClientContent = await apiClientFile.text();
+
+        // Should extract return type from direct function exports
+        expect(apiClientContent).toContain(
+          "Awaited<ReturnType<typeof Route0.GET>>"
+        );
+
+        // Should have useStream with proper type extraction
+        expect(apiClientContent).toContain(
+          "type ExtractedType = TResponse extends { __type: infer U } ? U : TResponse;"
+        );
+        expect(apiClientContent).toContain(
+          "return useStreamHook<ExtractedType>(fn, opts);"
+        );
+
+        // Should have ClientResponse type that handles streaming
+        expect(apiClientContent).toContain("type ClientResponse<T>");
+        expect(apiClientContent).toContain("__brand: 'streaming'");
+        expect(apiClientContent).toContain("__brand: 'sse'");
+        expect(apiClientContent).toContain("AsyncIterable<U>");
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+
+    test("generates fallback to ReturnType for direct function exports", async () => {
+      // Create route with direct function export
+      await mkdir(join(APP_DIR, "api", "direct"), { recursive: true });
+      await writeFile(
+        join(APP_DIR, "api", "direct", "route.ts"),
+        `export const GET = async () => new Response(JSON.stringify({ id: 1 }));`
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(TEST_DIR);
+
+      try {
+        await generateApiClient(APP_DIR);
+
+        const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
+        const apiClientContent = await apiClientFile.text();
+
+        // Should have type extraction that handles both __types and ReturnType
+        expect(apiClientContent).toContain(
+          "typeof Route0.GET extends { __types: { response: infer T } } ? T : Awaited<ReturnType<typeof Route0.GET>>"
         );
       } finally {
         process.chdir(originalCwd);

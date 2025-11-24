@@ -3,6 +3,8 @@
  * No Node.js-specific APIs (like process) allowed here
  */
 
+import { createContext } from "react";
+
 /**
  * Get applicable layout paths for a URL path
  * Returns an array of layout paths from root to most specific
@@ -23,3 +25,12 @@ export function getApplicableLayoutPaths(pathname: string): string[] {
 
   return layoutPaths;
 }
+
+/**
+ * SSR Router context to provide pathname during server-side rendering
+ */
+export const SSRRouterContext = createContext<{
+  pathname: string;
+  params: Record<string, string>;
+} | null>(null);
+

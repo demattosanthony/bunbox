@@ -40,9 +40,14 @@ export type {
   SocketMessage,
   SocketContext,
   SocketRouteModule,
+  StreamingResponse,
+  SSEResponse,
 } from "./core/types";
 
 export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";
 
-export { json, error, route } from "./core/route";
+export { json, error, route, stream, sse } from "./core/route";
+
+export { useStream } from "./client/useStream";
+export type { UseStreamOptions, UseStreamResult } from "./client/useStream";

@@ -4,8 +4,24 @@
  */
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { getApplicableLayoutPaths } from "../core/shared";
+import { getApplicableLayoutPaths } from "../core/shared.tsx";
 import type { PageProps } from "../core/types";
+
+/**
+ * Import SSR context (will be null on client)
+ */
+let SSRRouterContext: React.Context<{
+  pathname: string;
+  params: Record<string, string>;
+} | null> | null = null;
+if (typeof window === "undefined") {
+  try {
+    // Import from shared.tsx which has no Node.js dependencies
+    SSRRouterContext = require("../core/shared.tsx").SSRRouterContext;
+  } catch {
+    // SSR module not available
+  }
+}
 
 /**
  * Router context for sharing navigation state
@@ -166,7 +182,15 @@ export function Router({
         const newPath = new URL(link.href).pathname;
 
         // Don't intercept navigation to SSR pages - let browser do full page load
-        if (ssrPages.has(newPath)) {
+        // Check if the path matches any SSR page pattern
+        const isSSRPage = Array.from(ssrPages).some((ssrPath) => {
+          // Convert route pattern [slug] to regex pattern
+          const pattern = ssrPath.replace(/\[([^\]]+)\]/g, "[^/]+");
+          const regex = new RegExp(`^${pattern}$`);
+          return regex.test(newPath);
+        });
+
+        if (isSSRPage) {
           return;
         }
 
@@ -263,7 +287,30 @@ function DefaultNotFound() {
  */
 export function useRouter() {
   const context = useContext(RouterContext);
+
+  // Try to get SSR context if client context is not available
   if (!context) {
+    // During SSR, try to use SSR router context
+    if (typeof window === "undefined" && SSRRouterContext) {
+      const ssrContext = useContext(SSRRouterContext);
+      if (ssrContext) {
+        return {
+          pathname: ssrContext.pathname,
+          navigate: () => {},
+          params: ssrContext.params,
+        };
+      }
+    }
+
+    // Fallback for cases where neither context is available
+    if (typeof window === "undefined") {
+      return {
+        pathname: "/",
+        navigate: () => {},
+        params: {},
+      };
+    }
+
     throw new Error("useRouter must be used within a Router component");
   }
   return context;

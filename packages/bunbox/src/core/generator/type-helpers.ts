@@ -25,11 +25,12 @@ export function generateTypeAliases(node: ApiRouteTreeNode): string[] {
   function traverse(obj: ApiRouteTreeNode) {
     for (const meta of obj.methods) {
       // Extract all types from route.handle chains (params/query/body/response)
+      // For Response: Try __types first (route.handle), then ReturnType (direct functions)
       lines.push(
         `type ${meta.typeAlias}_Params = typeof ${meta.importName}.${meta.method} extends { __types: { params: infer T } } ? T : Record<string, unknown>;`,
         `type ${meta.typeAlias}_Query = typeof ${meta.importName}.${meta.method} extends { __types: { query: infer T } } ? T : Record<string, unknown>;`,
         `type ${meta.typeAlias}_Body = typeof ${meta.importName}.${meta.method} extends { __types: { body: infer T } } ? T : unknown;`,
-        `type ${meta.typeAlias}_Response = typeof ${meta.importName}.${meta.method} extends { __types: { response: infer T } } ? T : unknown;`
+        `type ${meta.typeAlias}_Response = typeof ${meta.importName}.${meta.method} extends { __types: { response: infer T } } ? T : Awaited<ReturnType<typeof ${meta.importName}.${meta.method}>>;`
       );
     }
 

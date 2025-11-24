@@ -11,7 +11,8 @@
   },
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/*",
+    "apps/*"
   ],
   "scripts": {
     "dev": "cd examples/basic && bun run dev",

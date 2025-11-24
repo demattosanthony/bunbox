@@ -6,9 +6,17 @@ export default function Home() {
         A modern, fast, and simple full-stack web framework built on Bun.
       </p>
 
-      <div className="links">
+      <div
+        className="links"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: "1rem",
+        }}
+      >
         <a href="/about">About</a>
         <a href="/users">useQuery Demo</a>
+        <a href="/stream-demo">Streaming Demo</a>
         <a href="/chat">WebSockets</a>
         <a href="/ssr-example?name=John">SSR Page</a>
         <a

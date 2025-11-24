@@ -12,6 +12,8 @@ import type {
   RouteParams,
   RouteQuery,
   EmptyExtras,
+  StreamingResponse,
+  SSEResponse,
 } from "./types";
 
 /**
@@ -37,6 +39,76 @@ export function json<T>(data: T, init: number | ResponseInit = 200): Response {
  */
 export function error(message: string, status = 400): Response {
   return json({ error: message }, status);
+}
+
+/**
+ * Internal helper to create streaming responses
+ */
+function createStreamingResponse<T>(
+  generator: AsyncGenerator<T> | (() => AsyncGenerator<T>),
+  transform: (value: T) => string | Uint8Array,
+  headers: Record<string, string>,
+  init?: ResponseInit
+): Response {
+  const iterator = typeof generator === "function" ? generator() : generator;
+
+  const stream = new ReadableStream({
+    async pull(controller) {
+      const { value, done } = await iterator.next();
+      if (done) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(transform(value));
+    },
+  });
+
+  const responseHeaders = new Headers(init?.headers || {});
+  for (const [key, value] of Object.entries(headers)) {
+    responseHeaders.set(key, value);
+  }
+
+  return new Response(stream, { ...init, headers: responseHeaders });
+}
+
+/**
+ * Create a streaming response from an async generator
+ */
+export function stream<T>(
+  generator:
+    | AsyncGenerator<string | Uint8Array>
+    | (() => AsyncGenerator<string | Uint8Array>),
+  init?: ResponseInit
+): StreamingResponse<T> {
+  return createStreamingResponse(
+    generator,
+    (value) => value,
+    {
+      "Content-Type": "text/plain",
+      "X-Bunbox-Stream": "1",
+    },
+    init
+  ) as StreamingResponse<T>;
+}
+
+/**
+ * Create a Server-Sent Events (SSE) response from an async generator
+ */
+export function sse<T>(
+  generator: AsyncGenerator<T> | (() => AsyncGenerator<T>),
+  init?: ResponseInit
+): SSEResponse<T> {
+  const encoder = new TextEncoder();
+  return createStreamingResponse(
+    generator,
+    (value) => encoder.encode(`data: ${JSON.stringify(value)}\n\n`),
+    {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+    init
+  ) as SSEResponse<T>;
 }
 
 class ValidationError extends Error {

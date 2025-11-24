@@ -335,3 +335,21 @@ export interface BunboxServerConfig {
       }
     | false;
 }
+
+/**
+ * Phantom type for streaming responses
+ * Used by client generator to infer AsyncIterable return type
+ */
+export interface StreamingResponse<T> extends Response {
+  readonly __brand: "streaming";
+  readonly __type: T;
+}
+
+/**
+ * Phantom type for SSE responses
+ * Used by client generator to infer AsyncIterable return type
+ */
+export interface SSEResponse<T> extends Response {
+  readonly __brand: "sse";
+  readonly __type: T;
+}
