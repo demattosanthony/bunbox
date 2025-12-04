@@ -10,6 +10,7 @@ export const metadata: PageMetadata = {
 export default function SSRExample({ params, query }: PageProps) {
   const serverTime = new Date().toISOString();
 
+  // This only runs on the server - no client hydration
   console.log("\n[SSR] Rendered at:", serverTime);
   console.log("[SSR] Query:", query);
 
@@ -18,7 +19,7 @@ export default function SSRExample({ params, query }: PageProps) {
       <h1>Server-Side Rendering</h1>
 
       <p style={{ color: "#666", fontSize: "1.125rem", marginTop: "1rem" }}>
-        This page rendered on the server.
+        This page is server-only. No React runs on the client.
       </p>
 
       <div
@@ -34,7 +35,7 @@ export default function SSRExample({ params, query }: PageProps) {
         <p style={{ margin: 0, color: "#333" }}>
           Add <code>"use server"</code> to the top of your page.
           <br />
-          That's it.
+          The page renders on the server only - fast, static HTML.
         </p>
       </div>
 
@@ -49,7 +50,7 @@ export default function SSRExample({ params, query }: PageProps) {
         <div
           style={{ color: "#999", fontSize: "0.75rem", marginBottom: "0.5rem" }}
         >
-          RENDERED AT
+          RENDERED AT (SERVER)
         </div>
         <div style={{ fontFamily: "monospace", fontSize: "0.875rem" }}>
           {serverTime}

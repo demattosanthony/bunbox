@@ -7,7 +7,7 @@ import { join } from "path";
 import { mkdir } from "node:fs/promises";
 import { scanPageRoutes, scanLayouts, scanApiRoutes } from "./scanner";
 import { routePathToUrl, toBunRoutePath } from "./router";
-import { checkUseServer, checkUseClient } from "./ssr";
+import { checkUseServer } from "./ssr";
 import { dynamicImport, resolveAbsolutePath } from "./utils";
 import {
   buildApiObject,
@@ -46,121 +46,9 @@ function insertRouteMethod(
 }
 
 /**
- * Validate component tree hierarchy
- * Server components cannot be children of client components
- */
-async function validateComponentTree(
-  appDir: string,
-  pageEntries: Array<{
-    routePath: string;
-    filepath: string;
-    requiresSSR: boolean;
-  }>,
-  layoutEntries: Array<{
-    routePath: string;
-    layoutFile: string;
-    isServerLayout: boolean;
-  }>
-): Promise<void> {
-  const warnings: string[] = [];
-
-  // Build a map of paths to their directive status
-  const pathDirectives = new Map<string, "server" | "client" | "none">();
-
-  // Check layouts first (they're higher in the tree)
-  for (const layout of layoutEntries) {
-    const hasClient = await checkUseClient(join(appDir, layout.layoutFile));
-    if (layout.isServerLayout) {
-      pathDirectives.set(layout.routePath, "server");
-    } else if (hasClient) {
-      pathDirectives.set(layout.routePath, "client");
-    } else {
-      pathDirectives.set(layout.routePath, "none");
-    }
-  }
-
-  // Check pages
-  for (const page of pageEntries) {
-    const hasClient = await checkUseClient(join(appDir, page.filepath));
-    let pageDirective: "server" | "client" | "none" = "none";
-
-    if (page.requiresSSR) {
-      pageDirective = "server";
-    } else if (hasClient) {
-      pageDirective = "client";
-    }
-
-    // Check if any parent layout is a client component
-    // If so, this page cannot be a server component
-    const pathSegments = page.routePath.split("/").filter(Boolean);
-    let currentPath = "";
-    let hasClientAncestor = false;
-
-    // Check root layout
-    if (pathDirectives.get("/") === "client") {
-      hasClientAncestor = true;
-    }
-
-    // Check nested layouts
-    for (const segment of pathSegments) {
-      currentPath += "/" + segment;
-      if (pathDirectives.get(currentPath) === "client") {
-        hasClientAncestor = true;
-        break;
-      }
-    }
-
-    // Validate: Server component cannot be child of client component
-    if (hasClientAncestor && pageDirective === "server") {
-      warnings.push(
-        `⚠️  Invalid component tree: Page "${page.routePath}" has "use server" but is nested under a client component layout. Server components cannot be children of client components.`
-      );
-    }
-
-    // Also check if a client layout is nested under a server layout with a server page
-    // This creates an invalid tree: Server -> Client -> Server
-    if (pageDirective === "server") {
-      let foundClient = false;
-      let foundServerBeforeClient = false;
-      currentPath = "";
-
-      // Check root
-      if (pathDirectives.get("/") === "server") {
-        foundServerBeforeClient = true;
-      }
-
-      for (const segment of pathSegments) {
-        currentPath += "/" + segment;
-        const directive = pathDirectives.get(currentPath);
-
-        if (directive === "client") {
-          foundClient = true;
-        } else if (directive === "server" && !foundClient) {
-          foundServerBeforeClient = true;
-        }
-      }
-
-      if (foundServerBeforeClient && foundClient) {
-        warnings.push(
-          `⚠️  Invalid component tree: Page "${page.routePath}" creates a Server -> Client -> Server pattern, which is not allowed. Once you have a client component, all children must be client components.`
-        );
-      }
-    }
-  }
-
-  // Print warnings
-  if (warnings.length > 0) {
-    console.log("");
-    console.log("⚠️  Component Tree Validation Warnings:");
-    warnings.forEach((warning) => console.log(warning));
-    console.log("");
-    console.log("Learn more: https://react.dev/reference/rsc/use-client");
-    console.log("");
-  }
-}
-
-/**
  * Generate routes file for client-side hydration
+ * SSR pages ("use server") are NOT included in client routes - they're server-only
+ * Only client-rendered pages are in the client bundle
  */
 export async function generateRoutesFile(appDir: string): Promise<string> {
   const pageRoutes = (await scanPageRoutes(appDir)).sort((a, b) =>
@@ -171,67 +59,44 @@ export async function generateRoutesFile(appDir: string): Promise<string> {
   const imports: string[] = [];
   const routeExports: string[] = [];
   const layoutExports: string[] = [];
-  const ssrPages: string[] = [];
+  const ssrPagePaths: string[] = [];
 
+  // Check which pages have "use server" directive
   const pageEntries = await Promise.all(
     pageRoutes.map(async (route, index) => {
       const routePath = routePathToUrl(route.filepath);
       const importName = `Page${index}`;
-      const requiresSSR = await checkUseServer(join(appDir, route.filepath));
-
-      return {
-        importName,
-        routePath,
-        filepath: route.filepath,
-        requiresSSR,
-      };
+      const isSSR = await checkUseServer(join(appDir, route.filepath));
+      return { importName, routePath, filepath: route.filepath, isSSR };
     })
   );
 
+  // Only import NON-SSR pages into client bundle
+  // SSR pages are server-only and don't run on client
   for (const entry of pageEntries) {
-    // Only import non-SSR pages into client bundle
-    // SSR pages are rendered on the server and don't need client-side routing
-    if (!entry.requiresSSR) {
+    if (entry.isSSR) {
+      // Track SSR pages for navigation handling
+      ssrPagePaths.push(`  "${entry.routePath}"`);
+    } else {
+      // Client-rendered pages get imported
       imports.push(
         `import ${entry.importName} from "../app/${entry.filepath}";`
       );
       routeExports.push(`  "${entry.routePath}": ${entry.importName}`);
-    } else {
-      // Keep track of SSR pages for the router to handle differently
-      ssrPages.push(`  "${entry.routePath}"`);
     }
   }
 
+  // Import ALL layouts into client bundle (needed for client pages)
   const sortedLayouts = Array.from(layouts.entries()).sort(([a], [b]) =>
     a.localeCompare(b)
   );
 
-  // Check which layouts can be included in client bundle
-  const layoutEntries = await Promise.all(
-    sortedLayouts.map(async ([routePath, layoutFile]) => {
-      const isServerLayout = await checkUseServer(join(appDir, layoutFile));
-      return {
-        routePath,
-        layoutFile,
-        isServerLayout,
-      };
-    })
-  );
-
   let layoutCounter = pageEntries.length;
-  for (const entry of layoutEntries) {
+  for (const [routePath, layoutFile] of sortedLayouts) {
     const importName = `Layout${layoutCounter++}`;
-
-    // Only import non-server layouts into client bundle
-    // Server layouts are rendered on the server during SSR
-    if (!entry.isServerLayout) {
-      imports.push(`import ${importName} from "../app/${entry.layoutFile}";`);
-      layoutExports.push(`  "${entry.routePath}": ${importName}`);
-    }
+    imports.push(`import ${importName} from "../app/${layoutFile}";`);
+    layoutExports.push(`  "${routePath}": ${importName}`);
   }
-
-  // Validate component tree hierarchy
-  await validateComponentTree(appDir, pageEntries, layoutEntries);
 
   // Write routes file
   const bunboxDir = join(process.cwd(), ".bunbox");
@@ -252,9 +117,9 @@ export const layouts = {
 ${layoutExports.join(",\n")}
 };
 
-// Set of route paths that require server-side rendering
+// Pages with "use server" directive - server-only, trigger full page loads
 export const ssrPages = new Set([
-${ssrPages.join(",\n")}
+${ssrPagePaths.join(",\n")}
 ]);
 `;
 

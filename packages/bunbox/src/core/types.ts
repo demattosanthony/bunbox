@@ -20,10 +20,11 @@ export interface Validator<T> {
 
 /**
  * Middleware function signature used by RouteBuilder
+ * Can return context extras, void, or a Response for early exit
  */
 export type Middleware<Ctx, Extra extends RouteExtras | void = void> = (
   ctx: Ctx
-) => Extra | void | Promise<Extra | void>;
+) => Extra | void | Response | Promise<Extra | void | Response>;
 
 /**
  * Route handler context exposed to developers
@@ -216,6 +217,7 @@ export interface RouteHandlers {
   PUT?: (req: Request) => Response | Promise<Response>;
   DELETE?: (req: Request) => Response | Promise<Response>;
   PATCH?: (req: Request) => Response | Promise<Response>;
+  OPTIONS?: (req: Request) => Response | Promise<Response>;
 }
 
 /**
@@ -352,4 +354,56 @@ export interface StreamingResponse<T> extends Response {
 export interface SSEResponse<T> extends Response {
   readonly __brand: "sse";
   readonly __type: T;
+}
+
+// ============================================================================
+// Job System Types
+// ============================================================================
+
+/**
+ * Job configuration for defining scheduled or triggered jobs
+ * @template T - The type of data passed to the job's run function
+ */
+export interface JobConfig<T = unknown> {
+  /**
+   * Cron schedule expression (5-field format)
+   * Format: "minute hour day-of-month month day-of-week"
+   * Examples: "0 * * * *" (hourly), "0 3 * * *" (daily at 3am)
+   */
+  schedule?: string;
+
+  /**
+   * Simple interval for job execution
+   * Format: number followed by unit (s, m, h, d)
+   * Examples: "30s", "5m", "1h", "1d"
+   * Cannot be used with `schedule`
+   */
+  interval?: string;
+
+  /**
+   * The job handler function
+   * @param data - Data passed when triggering the job (optional for scheduled jobs)
+   */
+  run: (data: T) => void | Promise<void>;
+}
+
+/**
+ * Job module with default export
+ */
+export interface JobModule<T = unknown> {
+  default: JobConfig<T>;
+}
+
+/**
+ * Internal job instance tracked by JobManager
+ */
+export interface JobInstance<T = unknown> {
+  /** Job name derived from filename */
+  name: string;
+  /** Job configuration */
+  config: JobConfig<T>;
+  /** File path for hot reload */
+  path: string;
+  /** Active timer reference (for cleanup) */
+  timer?: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>;
 }

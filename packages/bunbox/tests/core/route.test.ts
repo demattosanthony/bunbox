@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { route, json, error } from "../../src/core/route";
+import { route, json, error, defineMiddleware } from "../../src/core/route";
 import type { BunboxRequest } from "../../src/core/types";
 
 const createRequest = (
@@ -168,5 +168,146 @@ describe("route builder", () => {
       query: { filter: "all" },
       body: { name: "Test" },
     });
+  });
+});
+
+describe("middleware early exit", () => {
+  test("middleware can return Response to short-circuit", async () => {
+    const handler = route
+      .use(() => new Response("blocked", { status: 403 }))
+      .handle(() => ({ never: "reached" }));
+
+    const response = await handler(createRequest());
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe("blocked");
+  });
+
+  test("middleware can return error() for early exit", async () => {
+    const handler = route
+      .use(() => error("Unauthorized", 401))
+      .handle(() => ({ never: "reached" }));
+
+    const response = await handler(createRequest());
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Unauthorized" });
+  });
+
+  test("handler runs when middleware returns context", async () => {
+    const handler = route
+      .use(() => ({ authorized: true }))
+      .handle((ctx) => ({ authorized: ctx.authorized }));
+
+    const response = await handler(createRequest());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ authorized: true });
+  });
+
+  test("first middleware returning Response stops chain", async () => {
+    let secondCalled = false;
+    const handler = route
+      .use(() => error("stopped", 400))
+      .use(() => {
+        secondCalled = true;
+        return { second: true };
+      })
+      .handle(() => ({ ok: true }));
+
+    const response = await handler(createRequest());
+    expect(response.status).toBe(400);
+    expect(secondCalled).toBe(false);
+  });
+
+  test("conditional early exit based on request", async () => {
+    const mockReq = new Request("http://localhost/test", {
+      headers: { Authorization: "Bearer token" },
+    });
+    // Properly spread the request properties so headers is accessible
+    const bunboxReq = {
+      ...mockReq,
+      headers: mockReq.headers,
+      params: {},
+      query: {},
+      body: null,
+    } as unknown as BunboxRequest;
+
+    const auth = defineMiddleware((ctx) => {
+      const token = ctx.headers.get("Authorization");
+      if (!token) {
+        return error("No token", 401);
+      }
+      return { token };
+    });
+
+    const handler = route.use(auth).handle((ctx) => ({ token: ctx.token }));
+
+    const response = await handler(bunboxReq);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ token: "Bearer token" });
+  });
+
+  test("conditional early exit when auth missing", async () => {
+    const mockReq = new Request("http://localhost/test");
+    const bunboxReq = {
+      ...mockReq,
+      headers: mockReq.headers,
+      params: {},
+      query: {},
+      body: null,
+    } as unknown as BunboxRequest;
+
+    const auth = defineMiddleware((ctx) => {
+      const token = ctx.headers.get("Authorization");
+      if (!token) {
+        return error("No token", 401);
+      }
+      return { token };
+    });
+
+    const handler = route.use(auth).handle((ctx) => ({ token: ctx.token }));
+
+    const response = await handler(bunboxReq);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "No token" });
+  });
+});
+
+describe("defineMiddleware helper", () => {
+  test("defineMiddleware creates valid middleware", async () => {
+    const addUser = defineMiddleware(() => ({
+      user: { id: "123", name: "Test" },
+    }));
+
+    const handler = route.use(addUser).handle((ctx) => ({ user: ctx.user }));
+
+    const response = await handler(createRequest());
+    expect(await response.json()).toEqual({
+      user: { id: "123", name: "Test" },
+    });
+  });
+
+  test("defineMiddleware supports async functions", async () => {
+    const asyncMiddleware = defineMiddleware(async () => {
+      await Promise.resolve();
+      return { async: true };
+    });
+
+    const handler = route
+      .use(asyncMiddleware)
+      .handle((ctx) => ({ async: ctx.async }));
+
+    const response = await handler(createRequest());
+    expect(await response.json()).toEqual({ async: true });
+  });
+
+  test("defineMiddleware can return Response", async () => {
+    const earlyExit = defineMiddleware(() => {
+      return new Response("early", { status: 418 });
+    });
+
+    const handler = route.use(earlyExit).handle(() => ({ never: "called" }));
+
+    const response = await handler(createRequest());
+    expect(response.status).toBe(418);
+    expect(await response.text()).toBe("early");
   });
 });

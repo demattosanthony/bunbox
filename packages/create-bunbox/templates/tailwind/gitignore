@@ -1,0 +1,30 @@
+# dependencies
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# logs
+logs
+*.log
+
+# dotenv files
+.env
+.env.local
+.env.*.local
+
+# caches
+.cache
+*.tsbuildinfo
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+
+# Bunbox build output
+.bunbox/

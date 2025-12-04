@@ -19,7 +19,11 @@ export type {
 } from "./core/server";
 
 export { resolveConfig } from "./core/config";
-export type { BunboxConfig, ResolvedBunboxConfig } from "./core/config";
+export type {
+  BunboxConfig,
+  ResolvedBunboxConfig,
+  CorsConfig,
+} from "./core/config";
 
 export {
   buildForProduction,
@@ -42,12 +46,18 @@ export type {
   SocketRouteModule,
   StreamingResponse,
   SSEResponse,
+  JobConfig,
 } from "./core/types";
+
+export { defineJob, jobs } from "./core/jobs";
 
 export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";
 
-export { json, error, route, stream, sse } from "./core/route";
+export { json, error, route, stream, sse, defineMiddleware } from "./core/route";
 
 export { useStream } from "./client/useStream";
 export type { UseStreamOptions, UseStreamResult } from "./client/useStream";
+
+export { ClientIsland, registerIsland } from "./client/island";
+export type { ClientIslandProps } from "./client/island";

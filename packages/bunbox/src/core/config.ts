@@ -4,6 +4,24 @@
 
 import { join } from "path";
 
+/**
+ * CORS configuration options
+ */
+export interface CorsConfig {
+  /** Allowed origins. Use '*' for any, array for specific, or function for dynamic */
+  origin?: string | string[] | ((origin: string) => boolean);
+  /** Allowed HTTP methods (default: GET, POST, PUT, DELETE, PATCH, OPTIONS) */
+  methods?: string[];
+  /** Allowed request headers (default: Content-Type, Authorization) */
+  allowedHeaders?: string[];
+  /** Headers exposed to the client */
+  exposedHeaders?: string[];
+  /** Allow credentials (cookies, authorization headers) */
+  credentials?: boolean;
+  /** Preflight cache duration in seconds (default: 86400) */
+  maxAge?: number;
+}
+
 export interface BunboxConfig {
   port?: number;
   hostname?: string;
@@ -11,6 +29,20 @@ export interface BunboxConfig {
   wsDir?: string;
   socketsDir?: string;
   publicDir?: string;
+  /** CORS configuration. Set to true for permissive defaults, or configure specific options */
+  cors?: CorsConfig | boolean;
+}
+
+/**
+ * Resolved CORS configuration with defaults applied
+ */
+export interface ResolvedCorsConfig {
+  origin: string | string[] | ((origin: string) => boolean);
+  methods: string[];
+  allowedHeaders: string[];
+  exposedHeaders: string[];
+  credentials: boolean;
+  maxAge: number;
 }
 
 export interface ResolvedBunboxConfig {
@@ -21,12 +53,43 @@ export interface ResolvedBunboxConfig {
   socketsDir: string;
   publicDir: string;
   development: boolean;
+  cors: ResolvedCorsConfig | null;
+}
+
+/**
+ * Default CORS configuration (used when cors: true)
+ */
+const defaultCors: ResolvedCorsConfig = {
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: [],
+  credentials: false,
+  maxAge: 86400,
+};
+
+/**
+ * Resolve CORS config from user input
+ */
+function resolveCorsConfig(
+  cors: CorsConfig | boolean | undefined
+): ResolvedCorsConfig | null {
+  if (!cors) return null;
+  if (cors === true) return defaultCors;
+  return {
+    origin: cors.origin ?? defaultCors.origin,
+    methods: cors.methods ?? defaultCors.methods,
+    allowedHeaders: cors.allowedHeaders ?? defaultCors.allowedHeaders,
+    exposedHeaders: cors.exposedHeaders ?? defaultCors.exposedHeaders,
+    credentials: cors.credentials ?? defaultCors.credentials,
+    maxAge: cors.maxAge ?? defaultCors.maxAge,
+  };
 }
 
 /**
  * Default configuration
  */
-const defaults: ResolvedBunboxConfig = {
+const defaults: Omit<ResolvedBunboxConfig, "cors"> = {
   port: 3000,
   hostname: "localhost",
   appDir: join(process.cwd(), "app"),
@@ -74,5 +137,6 @@ export async function resolveConfig(
     publicDir:
       cliConfig.publicDir ?? fileConfig.publicDir ?? defaults.publicDir,
     development,
+    cors: resolveCorsConfig(cliConfig.cors ?? fileConfig.cors),
   };
 }

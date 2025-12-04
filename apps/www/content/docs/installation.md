@@ -17,7 +17,7 @@ curl -fsSL https://bun.sh/install | bash
 The fastest way to get started is with `bun create`:
 
 ```bash
-bun create bunbox my-app
+bunx create-bunbox my-app
 cd my-app
 bun install
 ```

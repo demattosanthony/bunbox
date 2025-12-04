@@ -1,0 +1,51 @@
+{
+  "name": "bunbox-deploy",
+  "version": "0.1.0",
+  "description": "Deploy Bunbox apps to VPS servers via SSH with automatic HTTPS",
+  "author": "Anthony Demattos",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/demattosanthony/bunbox.git",
+    "directory": "packages/bunbox-deploy"
+  },
+  "bin": {
+    "bunbox-deploy": "./bin/cli.ts"
+  },
+  "type": "module",
+  "main": "./src/index.ts",
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "bunbox",
+    "deploy",
+    "ssh",
+    "vps",
+    "pm2",
+    "caddy",
+    "bun"
+  ],
+  "dependencies": {
+    "ssh2": "^1.15.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/ssh2": "^1.15.0",
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "peerDependencies": {
+    "@ademattos/bunbox": "^0.2.0"
+  },
+  "engines": {
+    "bun": ">=1.0.36"
+  }
+}

@@ -121,6 +121,25 @@ class ValidationError extends Error {
   }
 }
 
+/**
+ * Helper to define middleware with full type inference
+ * Provides typed ctx and infers return type for context extension
+ *
+ * @example
+ * const auth = defineMiddleware(async (ctx) => {
+ *   const token = ctx.headers.get('authorization');
+ *   if (!token) return error('Unauthorized', 401);
+ *   return { user: await verifyToken(token) };
+ * });
+ */
+export function defineMiddleware<Extra extends RouteExtras | void = void>(
+  fn: (
+    ctx: RouteContext
+  ) => Extra | void | Response | Promise<Extra | void | Response>
+): Middleware<RouteContext, Extra> {
+  return fn;
+}
+
 type HandlerWithTypes<TParams, TQuery, TBody, TResponse> = RouteHandler & {
   __types: {
     params: TParams;
@@ -239,9 +258,16 @@ class RouteBuilder<
 
         // Apply middleware and merge returned context
         for (const middleware of this.internals.middlewares) {
-          const extra = await middleware(ctx as RuntimeContext);
-          if (extra && typeof extra === "object") {
-            ctx = { ...ctx, ...extra } as RouteContext<
+          const result = await middleware(ctx as RuntimeContext);
+
+          // Middleware returned Response = short-circuit (auth failure, etc.)
+          if (result instanceof Response) {
+            return result;
+          }
+
+          // Merge context extras
+          if (result && typeof result === "object") {
+            ctx = { ...ctx, ...result } as RouteContext<
               TParams,
               TQuery,
               TBody,

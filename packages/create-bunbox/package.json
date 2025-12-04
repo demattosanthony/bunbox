@@ -1,0 +1,42 @@
+{
+  "name": "create-bunbox",
+  "version": "0.1.0",
+  "description": "Create a new Bunbox project with a single command",
+  "author": "Anthony Demattos",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/demattosanthony/bunbox.git",
+    "directory": "packages/create-bunbox"
+  },
+  "bin": {
+    "create-bunbox": "./bin/cli.ts"
+  },
+  "type": "module",
+  "main": "./src/index.ts",
+  "files": [
+    "bin",
+    "src",
+    "templates"
+  ],
+  "keywords": [
+    "bunbox",
+    "bun",
+    "create",
+    "scaffold",
+    "cli",
+    "react",
+    "framework"
+  ],
+  "dependencies": {
+    "@inquirer/prompts": "^7.0.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.0.36"
+  }
+}

@@ -3,7 +3,7 @@
  */
 
 import { join } from "path";
-import type { ResolvedBunboxConfig } from "./config";
+import type { ResolvedBunboxConfig, ResolvedCorsConfig } from "./config";
 import { matchRoute, sortRoutes, toBunRoutePath } from "./router";
 import {
   scanPageRoutes,
@@ -12,8 +12,10 @@ import {
   scanSocketRoutes,
   scanLayouts,
   scanWorker,
+  scanJobs,
 } from "./scanner";
-import { renderPage, checkUseServer, generateHTMLShell } from "./ssr";
+import { jobManager } from "./jobs";
+import { renderPage, generateHTMLShell, checkUseServer } from "./ssr";
 import { generateRoutesFile, generateApiClient } from "./generator";
 import { createWatcher } from "./watcher";
 import { hasBuildArtifacts, getBuildMetadata } from "./build";
@@ -45,7 +47,6 @@ import type {
   SocketRouteModule,
   SocketUser,
   SocketMessage,
-  SocketContext,
   WorkerModule,
   WorkerCleanup,
   BunboxServerConfig,
@@ -84,6 +85,85 @@ function getTopicFromRoute(filepath: string): string {
   return filepath.replace(/\/route\.(tsx?|jsx?)$/, "");
 }
 
+/**
+ * Check if origin is allowed by CORS config
+ */
+function isOriginAllowed(
+  origin: string,
+  allowed: ResolvedCorsConfig["origin"]
+): boolean {
+  if (allowed === "*") return true;
+  if (typeof allowed === "string") return allowed === origin;
+  if (Array.isArray(allowed)) return allowed.includes(origin);
+  if (typeof allowed === "function") return allowed(origin);
+  return false;
+}
+
+/**
+ * Build CORS headers based on config and request
+ */
+function buildCorsHeaders(
+  req: Request,
+  config: ResolvedCorsConfig,
+  isPreflight: boolean
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const requestOrigin = req.headers.get("origin");
+
+  // Determine Access-Control-Allow-Origin
+  if (requestOrigin && isOriginAllowed(requestOrigin, config.origin)) {
+    // When credentials are enabled, must echo specific origin (not *)
+    headers["Access-Control-Allow-Origin"] =
+      config.origin === "*" && !config.credentials ? "*" : requestOrigin;
+  } else if (config.origin === "*" && !config.credentials) {
+    headers["Access-Control-Allow-Origin"] = "*";
+  }
+
+  // Credentials
+  if (config.credentials) {
+    headers["Access-Control-Allow-Credentials"] = "true";
+  }
+
+  // Exposed headers (for actual requests, not preflight)
+  if (!isPreflight && config.exposedHeaders.length > 0) {
+    headers["Access-Control-Expose-Headers"] = config.exposedHeaders.join(", ");
+  }
+
+  // Preflight-specific headers
+  if (isPreflight) {
+    headers["Access-Control-Allow-Methods"] = config.methods.join(", ");
+    headers["Access-Control-Allow-Headers"] = config.allowedHeaders.join(", ");
+    headers["Access-Control-Max-Age"] = String(config.maxAge);
+  }
+
+  return headers;
+}
+
+/**
+ * Add CORS headers to an existing Response
+ */
+function addCorsHeaders(
+  response: Response,
+  req: Request,
+  config: ResolvedCorsConfig
+): Response {
+  const corsHeaders = buildCorsHeaders(req, config, false);
+  if (Object.keys(corsHeaders).length === 0) {
+    return response;
+  }
+
+  const newHeaders = new Headers(response.headers);
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    newHeaders.set(key, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
 class BunboxServer {
   private config: ResolvedBunboxConfig;
   private pageRoutes: Route[] = [];
@@ -94,7 +174,7 @@ class BunboxServer {
   private wsHandlers: Map<string, WsRouteModule> = new Map();
   private socketHandlers: Map<string, SocketRouteModule> = new Map();
   private socketUsers: Map<string, Map<string, SocketUser>> = new Map(); // topic -> userId -> user
-  private serverSidePages: Set<string> = new Set();
+  private serverSidePages: Set<string> = new Set(); // Pages with "use server" directive
   private rootLayoutPath: string | null = null;
   private cachedMetadata: PageMetadata | null = null;
   private hmrClients: Set<ServerWebSocket> = new Set();
@@ -102,6 +182,7 @@ class BunboxServer {
   private server: Server<WebSocketData> | null = null;
   private workerPath: string | null = null;
   private workerInstance: WorkerCleanup | void | null = null;
+  private jobFiles: string[] = [];
 
   constructor(config: ResolvedBunboxConfig) {
     this.config = config;
@@ -116,6 +197,12 @@ class BunboxServer {
 
     // Scan for worker file first
     this.workerPath = await scanWorker(this.config.appDir);
+
+    // Scan for job files
+    this.jobFiles = await scanJobs(this.config.appDir);
+
+    // Initialize job manager
+    jobManager.init(this.config.appDir, this.config.development);
 
     // Scan all route types (needed to determine worker-only mode)
     this.pageRoutes = sortRoutes(await scanPageRoutes(this.config.appDir));
@@ -155,7 +242,7 @@ class BunboxServer {
         await generateApiClient(this.config.appDir, this.config);
       }
 
-      // Check which pages have "use server"
+      // Detect which pages have "use server" directive for SSR
       await this.detectServerSidePages();
 
       // Load WebSocket handlers in production
@@ -219,17 +306,16 @@ class BunboxServer {
   }
 
   /**
-   * Detect which pages have "use server" directive
+   * Detect which pages have "use server" directive for SSR
    */
   private async detectServerSidePages() {
     for (const route of this.pageRoutes) {
       const pagePath = join(this.config.appDir, route.filepath);
       try {
-        const hasUseServer = await checkUseServer(pagePath);
-        if (hasUseServer) {
+        if (await checkUseServer(pagePath)) {
           this.serverSidePages.add(route.filepath);
         }
-      } catch (error) {
+      } catch {
         // Silently continue - page might not exist
       }
     }
@@ -288,6 +374,14 @@ class BunboxServer {
     if (this.workerPath) {
       await this.stopWorker();
       await this.startWorker();
+    }
+
+    // Reload jobs
+    if (this.jobFiles.length > 0) {
+      jobManager.clear();
+      this.jobFiles = await scanJobs(this.config.appDir);
+      await jobManager.loadJobs(this.jobFiles);
+      jobManager.startScheduledJobs();
     }
 
     // Send reload message to all connected HMR clients
@@ -515,6 +609,33 @@ class BunboxServer {
   }
 
   /**
+   * Wrap an API handler with CORS support
+   */
+  private wrapWithCors(
+    handler: (req: Request) => Response | Promise<Response>
+  ): (req: Request) => Response | Promise<Response> {
+    if (!this.config.cors) return handler;
+
+    return async (req: Request) => {
+      const response = await handler(req);
+      return addCorsHeaders(response, req, this.config.cors!);
+    };
+  }
+
+  /**
+   * Create OPTIONS handler for CORS preflight
+   */
+  private createOptionsHandler(): (req: Request) => Response {
+    return (req: Request) => {
+      if (!this.config.cors) {
+        return new Response(null, { status: 204 });
+      }
+      const headers = buildCorsHeaders(req, this.config.cors, true);
+      return new Response(null, { status: 204, headers });
+    };
+  }
+
+  /**
    * Build all routes (internal, API, and page routes)
    */
   private async buildRoutes(): Promise<Record<string, RouteHandlers>> {
@@ -536,10 +657,14 @@ class BunboxServer {
 
       if (this.config.development) {
         // Dynamic handlers for hot reload
-        const handlers: RouteHandlers = {};
+        const handlers: RouteHandlers = {
+          // Add OPTIONS handler for CORS preflight
+          OPTIONS: this.createOptionsHandler(),
+        };
         for (const method of HTTP_METHODS) {
-          handlers[method] = (req: Request) =>
-            this.handleDynamicApi(req, route, absolutePath, method);
+          handlers[method] = this.wrapWithCors((req: Request) =>
+            this.handleDynamicApi(req, route, absolutePath, method)
+          );
         }
         routes[routePath] = handlers;
       } else {
@@ -549,12 +674,16 @@ class BunboxServer {
             absolutePath,
             false
           );
-          const handlers: RouteHandlers = {};
+          const handlers: RouteHandlers = {
+            // Add OPTIONS handler for CORS preflight
+            OPTIONS: this.createOptionsHandler(),
+          };
 
           for (const method of HTTP_METHODS) {
             if (module[method]) {
-              handlers[method] = (req: Request) =>
-                this.handleApiMethod(req, route, module[method]!);
+              handlers[method] = this.wrapWithCors((req: Request) =>
+                this.handleApiMethod(req, route, module[method]!)
+              );
             }
           }
 
@@ -565,7 +694,7 @@ class BunboxServer {
       }
     }
 
-    // Build SSR page routes
+    // Build SSR page routes (only pages with "use server" directive)
     for (const route of this.pageRoutes) {
       if (this.serverSidePages.has(route.filepath)) {
         const routePath = toBunRoutePath(route);
@@ -731,12 +860,12 @@ class BunboxServer {
     // Build routes
     const routes = await this.buildRoutes();
 
-    // Serve HTML shell for all client-side routed pages
+    // Fallback handler for client-rendered pages and public files
     routes["/*"] = {
       GET: async (req: Request) => {
         const url = new URL(req.url);
 
-        // Check for public directory files first
+        // Serve public directory files first
         if (
           !url.pathname.startsWith("/__bunbox") &&
           !url.pathname.startsWith("/api") &&
@@ -783,6 +912,8 @@ class BunboxServer {
           }
         }
 
+        // Serve HTML shell for client-side rendered pages
+        // The client router will handle routing and 404s
         const html = generateHTMLShell(
           {},
           Object.fromEntries(url.searchParams),
@@ -804,9 +935,20 @@ class BunboxServer {
       readyMessage: initResult.readyMessage,
       workerPath: this.workerPath,
       startWorkerAfterListen: async () => {
+        // Start worker if exists
         if (this.workerPath) await this.startWorker();
+
+        // Load and start scheduled jobs
+        if (this.jobFiles.length > 0) {
+          await jobManager.loadJobs(this.jobFiles);
+          jobManager.startScheduledJobs();
+        }
       },
       workerCleanup: async () => {
+        // Stop all jobs
+        jobManager.stopAll();
+
+        // Stop worker
         await this.stopWorker();
       },
 

@@ -136,3 +136,34 @@ export async function scanWorker(appDir: string): Promise<string | null> {
 
   return null;
 }
+
+const JOB_PATTERNS = [
+  "**/*.ts",
+  "**/*.tsx",
+  "**/*.js",
+  "**/*.jsx",
+];
+
+/**
+ * Scan for job files in app/jobs/ directory
+ * Returns array of job file paths relative to the jobs directory
+ */
+export async function scanJobs(appDir: string): Promise<string[]> {
+  const jobsDir = join(appDir, "jobs");
+  const jobs: string[] = [];
+
+  try {
+    const dirExists = await Bun.file(jobsDir).exists().catch(() => false);
+    // Check if jobs directory exists by trying to scan it
+    for (const pattern of JOB_PATTERNS) {
+      const glob = new Bun.Glob(pattern);
+      const entries = await Array.fromAsync(glob.scan({ cwd: jobsDir }));
+      jobs.push(...entries);
+    }
+  } catch {
+    // Directory doesn't exist, return empty array
+  }
+
+  // Return unique entries (in case of duplicates from multiple patterns)
+  return [...new Set(jobs)];
+}

@@ -109,38 +109,46 @@ pm2 startup
 pm2 save
 ```
 
-## Nginx Reverse Proxy
+## Caddy Reverse Proxy
 
-Configure Nginx as a reverse proxy:
+Configure Caddy as a reverse proxy with automatic HTTPS:
 
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
+1. Install Caddy:
 
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install caddy
+```
+
+2. Create a Caddyfile (`/etc/caddy/Caddyfile`):
+
+```caddy
+yourdomain.com {
+    reverse_proxy localhost:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
     }
 }
 ```
 
-## SSL with Let's Encrypt
-
-Add HTTPS with Certbot:
+3. Start and enable Caddy:
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com
+sudo systemctl enable caddy
+sudo systemctl start caddy
+sudo caddy reload --config /etc/caddy/Caddyfile
 ```
+
+Caddy automatically provisions and renews SSL certificates via Let's Encrypt - no additional configuration needed!
 
 ## Performance Tips
 
-1. **Enable compression** - Nginx handles gzip automatically
+1. **Enable compression** - Caddy handles gzip automatically
 2. **Use a CDN** - Serve static assets from a CDN
 3. **Set caching headers** - Cache static assets aggressively
 4. **Monitor performance** - Use tools like PM2 or systemd

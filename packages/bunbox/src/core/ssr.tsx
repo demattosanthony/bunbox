@@ -102,6 +102,7 @@ export async function checkUseClient(filePath: string): Promise<boolean> {
 
 /**
  * Render a React component to HTML with SSR using streaming
+ * Includes client bundle for hydration of client components
  */
 export async function renderPage(
   pageModule: PageModule,
@@ -149,6 +150,15 @@ export async function renderPage(
     <script dangerouslySetInnerHTML={{ __html: HMR_SCRIPT }} />
   ) : null;
 
+  // Initial state for client hydration
+  const initScript = (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `window.__BUNBOX_DATA__=${JSON.stringify({ params, query, pathname, ssr: true })};`,
+      }}
+    />
+  );
+
   // Wrap in full HTML document structure for SSR
   const fullDocument = (
     <html lang="en">
@@ -181,6 +191,8 @@ export async function renderPage(
       </head>
       <body>
         <div id="root">{content}</div>
+        {initScript}
+        <script type="module" src="/__bunbox/client.js" />
         {hmrScript}
       </body>
     </html>

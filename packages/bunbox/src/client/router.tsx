@@ -181,8 +181,13 @@ export function Router({
       ) {
         const newPath = new URL(link.href).pathname;
 
+        // Don't intercept API routes or socket routes - let browser make direct request
+        if (newPath.startsWith("/api/") || newPath.startsWith("/sockets/")) {
+          return; // Let browser handle the request directly
+        }
+
         // Don't intercept navigation to SSR pages - let browser do full page load
-        // Check if the path matches any SSR page pattern
+        // so the server can render the page
         const isSSRPage = Array.from(ssrPages).some((ssrPath) => {
           // Convert route pattern [slug] to regex pattern
           const pattern = ssrPath.replace(/\[([^\]]+)\]/g, "[^/]+");
@@ -191,7 +196,7 @@ export function Router({
         });
 
         if (isSSRPage) {
-          return;
+          return; // Let browser handle full page navigation
         }
 
         e.preventDefault();
@@ -208,7 +213,7 @@ export function Router({
       window.removeEventListener("popstate", handlePopState);
       document.removeEventListener("click", handleClick);
     };
-  }, [currentPath]);
+  }, [currentPath, ssrPages]);
 
   // Find matching route
   let matchedRoute: RouteConfig | null = null;

@@ -32,3 +32,5 @@ coverage/
 # Misc
 *.tmp
 *.temp
+
+plans/

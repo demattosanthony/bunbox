@@ -1,243 +1,135 @@
+<div align="center">
+
 # 📦 Bunbox
 
+For something between [Next.js](https://github.com/vercel/next.js) and [tRPC](https://github.com/trpc/trpc).
+
 [![npm version](https://img.shields.io/npm/v/@ademattos/bunbox.svg)](https://www.npmjs.com/package/@ademattos/bunbox)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/tinyboxe/bunbox/blob/main/LICENSE)
 
-A minimal full-stack framework for Bun. Create files in `app/` and they become routes - pages, APIs, socket servers, and workers.
+</div>
 
-## What You Get
+---
 
-- **File-based routing**: `app/about/page.tsx` → `/about`
-- **Server-side rendering**: React components render on the server
-- **API routes**: Ultra-minimal with full type safety
-- **Typed API client**: Auto-generated, fully typed (params, query, body, response)
-- **Socket servers**: Type-safe real-time communication
-- **Workers**: Background tasks and long-running processes
-- **TypeScript**: Full type safety, zero config
-- **Fast**: Powered by Bun's native HTTP server
+Bunbox is a full-stack web framework built on [Bun](https://bun.sh):
 
-## 🚀 Quick Start
+- **File-based routing** - pages, APIs, and sockets
+- **Type-safe APIs** - auto-generated typed client
+- **Real-time sockets** - WebSocket servers with protocol types
+- **SSR with React** - server-side rendering built-in
+- **Background workers** - web workers for heavy tasks
+- **Zero config** - works out of the box
+
+It's inspired by Next.js (file-based routing), tRPC (end-to-end type safety), and Socket.io (real-time), but stays intentionally tiny and hackable.
+
+---
+
+## How Bunbox compares
+
+**Next.js**
+
+- ✅ Similar: file-based routing (`app/about/page.tsx`), API routes, React SSR
+- ✅ You can build full-stack apps with familiar patterns
+- 🔁 Unlike Next.js, the entire framework is ~3,000 lines and fully understandable
+
+**tRPC**
+
+- ✅ End-to-end type safety from server to client
+- ✅ Auto-generated typed client for all your APIs
+- 🔁 Simpler: uses file-based routing instead of procedure builders
+
+**Socket.io**
+
+- ✅ WebSocket servers with event-based messaging
+- ✅ Built-in room/broadcast support
+- 🔁 Fully type-safe protocols and React hooks for the client
+
+---
+
+## Installation
 
 ```bash
 bun add @ademattos/bunbox
 ```
 
-Create your first page:
-
-```tsx
-// app/page.tsx
-export default function Home() {
-  return <h1>Hello World</h1>;
-}
-```
-
-Start the dev server:
+Or try an example:
 
 ```bash
-bunbox dev
+git clone https://github.com/demattosanthony/bunbox.git
+cd bunbox/examples/basic
+bun install
+bun dev
 ```
 
-Visit `http://localhost:3000`
+---
 
-## Project Structure
+## Quick examples
 
-```
-my-app/
-├── package.json
-├── bunbox.config.ts     # Optional
-└── app/
-    ├── page.tsx         # Home page (/)
-    ├── layout.tsx       # Root layout
-    ├── about/
-    │   └── page.tsx     # /about
-    ├── api/
-    │   └── hello/
-    │       └── route.ts # API endpoint
-    ├── sockets/         # Socket servers
-    │   └── chat/
-    │       ├── protocol.ts
-    │       └── route.ts
-    └── worker.ts        # Worker (optional)
-```
+### Pages
 
-## Pages
-
-Create `page.tsx` files for server-rendered React pages:
+Create a file, get a route. React Server Components render on the server.
 
 ```tsx
 // app/page.tsx
 export default function Home() {
   return <h1>Hello World</h1>;
 }
+```
 
-// app/blog/[slug]/page.tsx
-import type { PageProps } from "@ademattos/bunbox";
+→ `http://localhost:3000/`
 
-export default function BlogPost({ params, query }: PageProps) {
-  return <h1>Post: {params.slug}</h1>;
+```tsx
+// app/about/page.tsx
+export default function About() {
+  return <h1>About Us</h1>;
 }
 ```
 
-## API Routes
+→ `http://localhost:3000/about`
 
-Bunbox ships a fluent `route` builder for defining fully typed handlers with minimal syntax.
+### Type-safe APIs
 
-### Simple API Route
-
-```typescript
-// app/api/hello/route.ts
-import { route } from "@ademattos/bunbox";
-
-export const GET = route.handle(() => ({
-  message: "Hello World",
-  timestamp: new Date().toISOString(),
-}));
-```
-
-### Typed Params, Query, and Body
-
-Bring your own validator (Zod, Valibot, custom) and Bunbox will infer the types end-to-end.
+Define an API route and get a fully typed client automatically.
 
 ```typescript
+// app/api/user/[id]/route.ts
 import { route } from "@ademattos/bunbox";
 import { z } from "zod";
 
 const Params = z.object({ id: z.string() });
-const Query = z.object({ filter: z.string().optional() });
-const Body = z.object({ name: z.string(), email: z.string().email() });
+const Query = z.object({ include: z.string().optional() });
 
-export const POST = route
+export const GET = route
   .params(Params)
   .query(Query)
-  .body(Body)
-  .handle(({ params, query, body }) => ({
+  .handle(({ params, query }) => ({
     id: params.id,
-    filter: query.filter ?? "all",
-    created: body,
+    name: "John Doe",
+    email: query.include === "email" ? "john@example.com" : undefined,
   }));
 ```
 
-### Shared Middleware
-
-Compose reusable procedures with `use()`:
-
-```typescript
-const withAuth = route.use((ctx) => {
-  const token = ctx.headers.get("Authorization");
-  if (!token) throw new Error("Unauthorized");
-  return { user: { id: "user_123" } };
-});
-
-export const GET = withAuth.handle(({ user }) => ({
-  message: `Welcome ${user.id}`,
-}));
-```
-
-### Auto-Generated Typed Client
-
-Bunbox still generates `.bunbox/api-client.ts`, exposing a fully typed `api` object that mirrors your file system routes:
-
-```typescript
-import { api } from "./.bunbox/api-client";
-
-const user = await api.users.POST({
-  params: { id: "123" },
-  body: { name: "Alice", email: "alice@example.com" },
-});
-```
-
-### Validation
-
-```typescript
-import { route } from "@ademattos/bunbox";
-import { z } from "zod";
-
-const userSchema = z.object({
-  name: z.string().min(3),
-  email: z.string().email(),
-});
-
-export const POST = route.body(userSchema).handle(({ body }) => ({
-  id: "123",
-  ...body,
-}));
-```
-
-### React Hooks with useQuery
-
-Every API method automatically includes a `.useQuery()` hook for React components. This provides loading states, error handling, caching, and refetching out of the box.
+Use it from the client with full type safety:
 
 ```tsx
-// In a React component
-import { api } from "./.bunbox/api-client";
+// app/profile/page.tsx
+import { api } from "@ademattos/bunbox/client";
 
-function UserProfile({ userId }: { userId: string }) {
-  const { data, loading, error, refetch } = api.users.GET.useQuery({
-    params: { id: userId },
-    enabled: !!userId, // conditional fetching
+export default function Profile() {
+  const { data } = api.user[":id"].GET.useQuery({
+    params: { id: "123" },
+    query: { include: "email" }, // fully typed!
   });
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error.message}</div>;
-
-  return (
-    <div>
-      <h1>{data?.name}</h1>
-      <button onClick={refetch}>Refresh</button>
-    </div>
-  );
+  return <div>{data?.email}</div>; // data is fully typed!
 }
 ```
 
-**Features:**
+See how the types flow through? No code generation step. No build plugins. Just TypeScript.
 
-- **Loading states**: `loading` boolean tracks request status
-- **Error handling**: `error` contains any fetch errors
-- **Caching**: Responses are cached automatically
-- **Refetch**: Manual refetch via `refetch()` function
-- **Conditional fetching**: Use `enabled: false` to skip the request
+### Real-time WebSockets
 
-**Query options:**
-
-```tsx
-const { data, loading, error, refetch } = api.posts.GET.useQuery({
-  params: { id: "123" },      // URL params
-  query: { filter: "recent" }, // Query string params
-  body: { data: "..." },       // Request body (POST/PUT/PATCH)
-  headers: { ... },            // Custom headers
-  enabled: true,               // Whether to fetch (default: true)
-});
-```
-
-**Cache management:**
-
-```typescript
-import { clearQueryCache, clearQueryCacheKey } from "@ademattos/bunbox/client";
-
-// Clear entire cache
-clearQueryCache();
-
-// Clear specific query
-clearQueryCacheKey("GET", "/api/users", { params: { id: "123" } });
-```
-
-## Socket Servers
-
-Socket servers provide type-safe, structured real-time communication.
-
-### 1. Define a Protocol
-
-```typescript
-// app/sockets/chat/protocol.ts
-import { defineProtocol } from "@ademattos/bunbox";
-
-export const ChatProtocol = defineProtocol({
-  "chat-message": { text: "", username: "" },
-  "user-joined": { username: "" },
-  "user-left": { username: "" },
-});
-```
-
-### 2. Create the Socket Server
+Create a socket server with event handlers:
 
 ```typescript
 // app/sockets/chat/route.ts
@@ -247,13 +139,6 @@ import type {
   SocketMessage,
 } from "@ademattos/bunbox";
 
-export function onJoin(user: SocketUser, ctx: SocketContext) {
-  // user.data is fully generic - pass any data you need
-  ctx.broadcast("user-joined", {
-    username: user.data.username || user.id,
-  });
-}
-
 export function onMessage(
   user: SocketUser,
   message: SocketMessage,
@@ -262,165 +147,63 @@ export function onMessage(
   if (message.type === "chat-message") {
     ctx.broadcast("chat-message", {
       text: message.data.text,
-      username: user.data.username || user.id,
+      username: user.data.username,
     });
   }
 }
-
-export function onLeave(user: SocketUser, ctx: SocketContext) {
-  ctx.broadcast("user-left", {
-    username: user.data.username || user.id,
-  });
-}
-
-// Optional: Authorize connections
-export function onAuthorize(
-  req: Request,
-  userData: Record<string, string>
-): boolean {
-  // Validate user data before allowing connection
-  return true;
-}
 ```
 
-### 3. Connect from React
+Use it from the client with the `useSocket` hook:
 
 ```tsx
+// app/chat/page.tsx
 import { useSocket } from "@ademattos/bunbox/client";
-import { ChatProtocol } from "./app/sockets/chat/protocol";
 
-function Chat() {
-  const { subscribe, publish } = useSocket("/sockets/chat", ChatProtocol, {
-    username: "Alice",
+export default function Chat() {
+  const { subscribe, publish, connected } = useSocket("/sockets/chat", {
+    username: "alice",
   });
 
   useEffect(() => {
     return subscribe("chat-message", (msg) => {
-      console.log(`${msg.data.username}: ${msg.data.text}`);
+      console.log(msg.data.text); // fully typed!
     });
-  }, [subscribe]);
+  }, []);
 
-  return (
-    <button
-      onClick={() =>
-        publish("chat-message", { text: "Hi!", username: "Alice" })
-      }
-    >
-      Send
-    </button>
-  );
+  const send = () => publish("chat-message", { text: "Hello!" });
+
+  return <button onClick={send}>Send</button>;
 }
 ```
 
-### Socket Client (Vanilla JS)
+See [examples/basic/app/chat](./examples/basic/app/chat) for a complete chat app.
 
-```typescript
-import { SocketClient } from "@ademattos/bunbox/client";
-import { ChatProtocol } from "./app/sockets/chat/protocol";
-
-const client = new SocketClient("/sockets/chat", ChatProtocol, {
-  username: "Alice",
-});
-
-client.subscribe("chat-message", (msg) => {
-  console.log(`${msg.data.username}: ${msg.data.text}`);
-});
-
-client.publish("chat-message", { text: "Hello!", username: "Alice" });
-```
-
-## Workers
-
-Workers run background tasks. Create `app/worker.ts`:
-
-```typescript
-// app/worker.ts
-import { SocketClient } from "@ademattos/bunbox/client";
-import { ChatProtocol } from "./sockets/chat/protocol";
-
-export default async function worker() {
-  const client = new SocketClient("/sockets/chat", ChatProtocol, {
-    username: "WorkerBot",
-  });
-
-  client.subscribe("chat-message", (msg) => {
-    if (msg.data.text.includes("@bot")) {
-      client.publish("chat-message", {
-        text: "I'm here!",
-        username: "WorkerBot",
-      });
-    }
-  });
-
-  // Optional cleanup function for graceful shutdown
-  return {
-    close: () => client.close(),
-  };
-}
-```
-
-**Worker modes:**
-
-- **Mixed**: Worker + HTTP server (when you have both `app/worker.ts` and routes)
-- **Worker-only**: Only worker runs, no HTTP server (when you only have `app/worker.ts`)
-
-## Configuration
-
-Create `bunbox.config.ts`:
-
-```typescript
-import type { BunboxConfig } from "@ademattos/bunbox";
-
-const config: BunboxConfig = {
-  port: 3000,
-  hostname: "localhost",
-  appDir: "./app",
-};
-
-export default config;
-```
-
-## CLI
-
-```bash
-bunbox dev              # Development with hot reload
-bunbox start            # Production
-
-# Options
-bunbox dev --port 8080
-bunbox start --hostname 0.0.0.0
-```
-
-## Examples
-
-See `examples/basic/` for a complete example app.
-
-```bash
-cd examples/basic
-bun dev
-```
+---
 
 ## Why Bunbox?
 
-- **Minimal**: Only 2,449 lines of core code
-- **Typed**: Fully typed API client with params, query, body, response
-- **Fast**: Built on Bun's native HTTP server
-- **Simple**: `export const GET = route.handle(() => ({ ... }))` - that's it
-- **Flexible**: Bring your own validation library (Zod, Yup, etc.)
-- **Zero config**: Works out of the box
+**For Next.js users**
 
-## Philosophy
+You want file-based routing and React SSR, but you don't need all of Next.js. You want something you can read and understand in an afternoon.
 
-> "The best code is deleted code"
+**For tRPC users**
 
-Bunbox gives you:
+You want end-to-end type safety, but you prefer file-based routing over procedure builders. You want API routes that feel like REST but work like RPC.
 
-- File-based routing (like Next.js)
-- Typed API client (like tRPC, but simpler)
-- Real-time sockets (like Socket.io, but type-safe)
-- All in a tiny, hackable codebase
+**For Socket.io users**
 
-No magic. No vendor lock-in. Just TypeScript and Bun.
+You want real-time WebSockets with clean abstractions, but you also want type safety and React hooks that just work.
+
+**For everyone**
+
+You want a framework that's small enough to understand completely (~3,000 lines), but powerful enough to build real apps. No magic, no complexity - just files become routes, types flow through automatically.
+
+---
+
+## Examples
+
+- [examples/basic](./examples/basic) - Full-featured app with pages, APIs, and WebSockets
+- [examples/with-tailwind](./examples/with-tailwind) - Styled with Tailwind CSS and shadcn/ui
 
 ## License
 
