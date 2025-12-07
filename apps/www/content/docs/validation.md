@@ -25,12 +25,15 @@ const createUserSchema = z.object({
   age: z.number().min(18).optional(),
 });
 
-export const POST = route.body(createUserSchema).handle(async (ctx) => {
-  // ctx.body is typed and validated
-  const { name, email, age } = ctx.body;
+export const createUser = route
+  .post()
+  .body(createUserSchema)
+  .handle(async (ctx) => {
+    // ctx.body is typed and validated
+    const { name, email, age } = ctx.body;
 
-  return { user: { name, email, age } };
-});
+    return { user: { name, email, age } };
+  });
 ```
 
 ## Query Validation
@@ -44,12 +47,15 @@ const searchSchema = z.object({
   offset: z.coerce.number().default(0),
 });
 
-export const GET = route.query(searchSchema).handle(async (ctx) => {
-  const { q, limit, offset } = ctx.query;
+export const searchItems = route
+  .get()
+  .query(searchSchema)
+  .handle(async (ctx) => {
+    const { q, limit, offset } = ctx.query;
 
-  const results = await search(q, { limit, offset });
-  return { results };
-});
+    const results = await search(q, { limit, offset });
+    return { results };
+  });
 ```
 
 ## Params Validation
@@ -61,11 +67,14 @@ const paramsSchema = z.object({
   id: z.string().uuid(),
 });
 
-export const GET = route.params(paramsSchema).handle(async (ctx) => {
-  // ctx.params.id is a valid UUID
-  const user = await getUser(ctx.params.id);
-  return { user };
-});
+export const getUser = route
+  .get()
+  .params(paramsSchema)
+  .handle(async (ctx) => {
+    // ctx.params.id is a valid UUID
+    const user = await getUser(ctx.params.id);
+    return { user };
+  });
 ```
 
 ## Multiple Validators
@@ -82,7 +91,8 @@ const bodySchema = z.object({
   email: z.string().email(),
 });
 
-export const PUT = route
+export const updateUser = route
+  .put()
   .params(paramsSchema)
   .body(bodySchema)
   .handle(async (ctx) => {
@@ -105,9 +115,12 @@ const userSchema = z.object({
     .max(120, "Invalid age"),
 });
 
-export const POST = route.body(userSchema).handle(async (ctx) => {
-  return { user: ctx.body };
-});
+export const createUser = route
+  .post()
+  .body(userSchema)
+  .handle(async (ctx) => {
+    return { user: ctx.body };
+  });
 ```
 
 ## Complex Validation
@@ -130,9 +143,12 @@ const userSchema = z.object({
   metadata: z.record(z.string()).optional(),
 });
 
-export const POST = route.body(userSchema).handle(async (ctx) => {
-  return { user: ctx.body };
-});
+export const createUser = route
+  .post()
+  .body(userSchema)
+  .handle(async (ctx) => {
+    return { user: ctx.body };
+  });
 ```
 
 ## Error Handling
@@ -160,9 +176,12 @@ class CustomValidator {
   }
 }
 
-export const POST = route.body(new CustomValidator()).handle(async (ctx) => {
-  return { data: ctx.body };
-});
+export const processData = route
+  .post()
+  .body(new CustomValidator())
+  .handle(async (ctx) => {
+    return { data: ctx.body };
+  });
 ```
 
 ## Transformations
@@ -179,8 +198,11 @@ const userSchema = z.object({
   createdAt: z.string().transform((s) => new Date(s)),
 });
 
-export const POST = route.body(userSchema).handle(async (ctx) => {
-  // email is lowercase, name is trimmed, createdAt is a Date
-  return { user: ctx.body };
-});
+export const createUser = route
+  .post()
+  .body(userSchema)
+  .handle(async (ctx) => {
+    // email is lowercase, name is trimmed, createdAt is a Date
+    return { user: ctx.body };
+  });
 ```

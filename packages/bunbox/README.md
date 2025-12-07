@@ -4,10 +4,14 @@
 
 A full-stack TypeScript framework built on [Bun](https://bun.sh). File-based routing, type-safe APIs, and real-time WebSockets.
 
+<h3>
+
+[Homepage](https://bunbox.anthonydemattos.com) | [Documentation](https://bunbox.anthonydemattos.com/docs/introduction)
+
+</h3>
+
 [![npm version](https://img.shields.io/npm/v/@ademattos/bunbox.svg)](https://www.npmjs.com/package/@ademattos/bunbox)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/tinyboxe/bunbox/blob/main/LICENSE)
-
-[Documentation](https://bunbox.anthonydemattos.com/docs/introduction)
 
 </div>
 
@@ -79,23 +83,23 @@ export const getUser = route
   }));
 ```
 
-Use it from the client with full type safety:
+Use it from the client with full type safety and flattened options:
 
 ```tsx
 // app/profile/page.tsx
 import { api } from "@ademattos/bunbox/client";
 
 export default function Profile() {
-  const { data } = api.user[":id"].getUser.useQuery({
-    params: { id: "123" },
-    query: { include: "email" }, // fully typed!
+  const { data } = api.user.getUser.useQuery({
+    id: "123",           // params are flattened
+    include: "email",    // query params are flattened too!
   });
 
   return <div>{data?.email}</div>; // data is fully typed!
 }
 ```
 
-See how the types flow through? No code generation step. No build plugins. Just TypeScript.
+See how the types flow through? No code generation step. No build plugins. Just TypeScript. And with flattened options, the API is clean and intuitive.
 
 ### Real-time WebSockets
 

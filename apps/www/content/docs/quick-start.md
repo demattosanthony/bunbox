@@ -62,12 +62,12 @@ const posts = [
   { id: 2, title: "Second Post", slug: "second-post" },
 ];
 
-export const GET = route.handle(async () => {
+export const listPosts = route.get().handle(async () => {
   return { posts };
 });
 ```
 
-The API is available at `http://localhost:3000/api/posts`.
+The API is available at `http://localhost:3000/api/posts` and can be called via the type-safe client as `api.posts.listPosts()`.
 
 ## Add a Layout
 

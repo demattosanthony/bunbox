@@ -6,9 +6,9 @@ import { api } from "../../.bunbox/api-client";
 
 export default function StreamPage() {
   const { data, latest, loading, error, start, abort } =
-    api.stream.GET.useStream({
+    api.stream.streamTokens.useStream({
       enabled: false, // Wait for button click
-      onMessage: (msg) => console.log("Received:", msg),
+      onMessage: (msg: { token: string }) => console.log("Received:", msg),
       onFinish: () => console.log("Stream finished"),
     });
 
@@ -114,7 +114,7 @@ export default function StreamPage() {
             whiteSpace: "pre-wrap",
           }}
         >
-          {data.map((msg, i) => (
+          {data.map((msg: { token: string }, i: number) => (
             <span key={i} style={{ animation: "fadeIn 0.3s ease-in" }}>
               {msg.token}
             </span>
@@ -162,7 +162,7 @@ export default function StreamPage() {
               fontFamily: "monospace",
             }}
           >
-            {`const { data, loading, start } = api.stream.GET.useStream({
+            {`const { data, loading, start } = api.stream.streamTokens.useStream({
   onMessage: (msg) => console.log(msg),
 });
 

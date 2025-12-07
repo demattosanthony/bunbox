@@ -15,18 +15,18 @@ import { api } from "@/.bunbox/api-client";
 
 ## Using the API Client
 
-The client mirrors your route structure:
+The client mirrors your route structure, using your exported handler names as method names:
 
 ```typescript
 // app/api/users/route.ts
-export const GET = route.handle(async () => {
+export const listUsers = route.get().handle(async () => {
   return { users: [] };
 });
 
 // In your component
 import { api } from "@/.bunbox/api-client";
 
-const response = await api.users.GET();
+const response = await api.users.listUsers();
 // response is typed as { users: unknown[] }
 ```
 
@@ -36,67 +36,69 @@ The client automatically infers types from your route handlers:
 
 ```typescript
 // app/api/users/[id]/route.ts
-export const GET = route.handle(async ({ params }) => {
+export const getUser = route.get().handle(async ({ params }) => {
   return { id: params.id, name: "John" };
 });
 
-// Client usage - fully typed!
-const user = await api.users["[id]"].GET({ params: { id: "123" } });
+// Client usage - fully typed with flattened params!
+const user = await api.users.getUser({ id: "123" });
 // user is typed based on your return value
 ```
 
 ## Query Parameters
 
-Pass query parameters:
+Query parameters are flattened into the options object:
 
 ```typescript
 // app/api/search/route.ts
-export const GET = route
+export const search = route
+  .get()
   .query(z.object({ q: z.string() }))
   .handle(async ({ query }) => {
     return { results: [] };
   });
 
-// Client usage
-const results = await api.search.GET({ query: { q: "bunbox" } });
+// Client usage - query params are flattened
+const results = await api.search.search({ q: "bunbox" });
 ```
 
 ## Request Body
 
-Send request bodies:
+For POST/PUT/PATCH requests, body fields are flattened:
 
 ```typescript
 // app/api/users/route.ts
-export const POST = route
+export const createUser = route
+  .post()
   .body(z.object({ name: z.string() }))
   .handle(async ({ body }) => {
     return { user: body };
   });
 
-// Client usage
-const user = await api.users.POST({ body: { name: "Alice" } });
+// Client usage - body fields are flattened
+const user = await api.users.createUser({ name: "Alice" });
 ```
 
 ## Route Parameters
 
-Use dynamic route parameters:
+Dynamic route parameters are flattened into the options object:
 
 ```typescript
 // app/api/users/[id]/route.ts
-export const GET = route.handle(async ({ params }) => {
+export const getUser = route.get().handle(async ({ params }) => {
   return { id: params.id };
 });
 
-// Client usage
-const user = await api.users["[id]"].GET({ params: { id: "123" } });
+// Client usage - params are flattened (no nested { params: {} })
+const user = await api.users.getUser({ id: "123" });
 ```
 
 ## Headers
 
-Pass custom headers:
+Pass custom headers (the only non-flattened option):
 
 ```typescript
-const response = await api.users.GET({
+const response = await api.users.listUsers({
   headers: {
     Authorization: "Bearer token",
   },
@@ -109,7 +111,7 @@ Handle errors:
 
 ```typescript
 try {
-  const data = await api.users.GET();
+  const data = await api.users.listUsers();
 } catch (error) {
   console.error("Request failed:", error);
 }
@@ -123,7 +125,7 @@ Use the generated `useQuery` hook for React components:
 import { api } from "@/.bunbox/api-client";
 
 export default function UsersPage() {
-  const { data, loading, error, refetch } = api.users.GET.useQuery();
+  const { data, loading, error, refetch } = api.users.listUsers.useQuery();
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error: {error.message}</div>;
@@ -140,7 +142,7 @@ For streaming endpoints:
 import { api } from "@/.bunbox/api-client";
 
 export default function StreamPage() {
-  const { data, latest, loading } = api.stream.GET.useStream();
+  const { data, latest, loading } = api.stream.streamTokens.useStream();
 
   return <div>{latest?.token}</div>;
 }
@@ -161,15 +163,15 @@ bun run build
 
 ## Client Structure
 
-The client mirrors your `app/api/` directory structure:
+The client mirrors your `app/api/` directory structure, with handler names as methods:
 
 ```
 app/api/
 ├── users/
-│   └── route.ts          -> api.users.GET, api.users.POST
+│   └── route.ts          -> api.users.listUsers, api.users.createUser
 └── posts/
     └── [id]/
-        └── route.ts      -> api.posts["[id]"].GET
+        └── route.ts      -> api.posts.getPost (dynamic segments are flattened)
 ```
 
 ## Type Inference
@@ -182,10 +184,28 @@ Types are inferred from:
 - Response type (from handler return value)
 
 ```typescript
-// Fully typed!
-const result = await api.users["[id]"].PUT({
-  params: { id: "123" },
-  body: { name: "New Name" },
-  query: { update: "true" },
+// Fully typed with flattened options!
+const result = await api.users.updateUser({
+  id: "123",           // from route params
+  name: "New Name",    // from body
+  notify: "true",      // from query (for GET/DELETE) or body (for POST/PUT/PATCH)
 });
+```
+
+## Flattened Options
+
+The API client uses flattened options for better DX:
+
+- **Route params**: Directly in options (e.g., `{ id: "123" }`)
+- **Query params** (GET/DELETE): Directly in options (e.g., `{ role: "admin" }`)
+- **Body fields** (POST/PUT/PATCH): Directly in options (e.g., `{ name: "John" }`)
+- **Headers**: Always under `headers` key
+- **Hook options**: `enabled`, `onMessage`, `onError`, `onFinish`
+
+```typescript
+// GET request - id goes to params, role goes to query
+api.users.getUser({ id: "123", role: "admin" });
+
+// POST request - id goes to params, name goes to body
+api.users.updateUser({ id: "123", name: "New Name" });
 ```

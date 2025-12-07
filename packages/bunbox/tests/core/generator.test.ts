@@ -370,9 +370,9 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
         expect(apiClientContent).toContain("import type * as Route0 from");
         expect(apiClientContent).toContain("api/health/route.ts");
 
-        // Should have health endpoint
+        // Should have health endpoint with handler name (not HTTP method)
         expect(apiClientContent).toContain("health: {");
-        expect(apiClientContent).toContain("GET: createApiMethod");
+        expect(apiClientContent).toMatch(/getHandler\w+: createApiMethod/);
       } finally {
         process.chdir(originalCwd);
       }
@@ -395,11 +395,11 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
 
-        // Should have all methods
+        // Should have all methods with handler names
         expect(apiClientContent).toContain("users: {");
-        expect(apiClientContent).toContain("GET: createApiMethod");
-        expect(apiClientContent).toContain("POST: createApiMethod");
-        expect(apiClientContent).toContain("DELETE: createApiMethod");
+        expect(apiClientContent).toMatch(/getHandler\w+: createApiMethod/);
+        expect(apiClientContent).toMatch(/postHandler\w+: createApiMethod/);
+        expect(apiClientContent).toMatch(/deleteHandler\w+: createApiMethod/);
       } finally {
         process.chdir(originalCwd);
       }
@@ -422,10 +422,10 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
 
-        // Should have nested structure
+        // Should have nested structure with handler names
         expect(apiClientContent).toContain("v1: {");
         expect(apiClientContent).toContain("users: {");
-        expect(apiClientContent).toContain("GET: createApiMethod");
+        expect(apiClientContent).toMatch(/getHandler\w+: createApiMethod/);
       } finally {
         process.chdir(originalCwd);
       }
@@ -448,10 +448,11 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
 
-        // Should have dynamic segment (using :id format for Bun router)
+        // Dynamic segments are now flattened - handler is directly under users
+        // (no more nested ":id" key)
         expect(apiClientContent).toContain("users: {");
-        expect(apiClientContent).toContain('":id": {');
-        expect(apiClientContent).toContain("GET: createApiMethod");
+        expect(apiClientContent).not.toContain('":id": {');
+        expect(apiClientContent).toMatch(/getHandler\w+: createApiMethod/);
       } finally {
         process.chdir(originalCwd);
       }
@@ -480,11 +481,11 @@ export const listUsers = route
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
 
-        // Should generate type aliases
-        expect(apiClientContent).toContain("type Route0_GET_Params =");
-        expect(apiClientContent).toContain("type Route0_GET_Query =");
-        expect(apiClientContent).toContain("type Route0_GET_Body =");
-        expect(apiClientContent).toContain("type Route0_GET_Response =");
+        // Should generate type aliases using handler names (not HTTP method)
+        expect(apiClientContent).toMatch(/type Route0_\w+_Params =/);
+        expect(apiClientContent).toMatch(/type Route0_\w+_Query =/);
+        expect(apiClientContent).toMatch(/type Route0_\w+_Body =/);
+        expect(apiClientContent).toMatch(/type Route0_\w+_Response =/);
       } finally {
         process.chdir(originalCwd);
       }
@@ -508,7 +509,7 @@ export const listUsers = route
         const apiClientContent = await apiClientFile.text();
 
         // Path should be relative to /api
-        expect(apiClientContent).toContain("GET: createApiMethod");
+        expect(apiClientContent).toMatch(/getHandler\w+: createApiMethod/);
         expect(apiClientContent).toContain('"/api/root"');
       } finally {
         process.chdir(originalCwd);
@@ -682,9 +683,9 @@ export const listUsers = route
           "createQueryHook<ClientResponse<TResponse>>"
         );
 
-        // Should have type definitions
+        // Should have type definitions (using FlattenedOptions instead of ApiMethodOptions)
         expect(apiClientContent).toContain("type ApiMethod<");
-        expect(apiClientContent).toContain("type ApiMethodOptions<");
+        expect(apiClientContent).toContain("type FlattenedOptions<");
         expect(apiClientContent).toContain("type ClientResponse<");
       } finally {
         process.chdir(originalCwd);
@@ -708,13 +709,14 @@ export const listUsers = route
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
 
-        // Should generate methods using createApiMethod
+        // Should generate methods using createApiMethod with handler names
         expect(apiClientContent).toContain("items: {");
-        expect(apiClientContent).toContain(
-          'GET: createApiMethod<Route0_GET_Response, Route0_GET_Params, Route0_GET_Query, Route0_GET_Body>("GET", "/api/items")'
+        // Handler names include random suffix, so use regex
+        expect(apiClientContent).toMatch(
+          /getHandler\w+: createApiMethod<Route0_getHandler\w+_Response, Route0_getHandler\w+_Params, Route0_getHandler\w+_Query, Route0_getHandler\w+_Body>\("GET", "\/api\/items", \[\]\)/
         );
-        expect(apiClientContent).toContain(
-          'POST: createApiMethod<Route0_POST_Response, Route0_POST_Params, Route0_POST_Query, Route0_POST_Body>("POST", "/api/items")'
+        expect(apiClientContent).toMatch(
+          /postHandler\w+: createApiMethod<Route0_postHandler\w+_Response, Route0_postHandler\w+_Params, Route0_postHandler\w+_Query, Route0_postHandler\w+_Body>\("POST", "\/api\/items", \[\]\)/
         );
       } finally {
         process.chdir(originalCwd);

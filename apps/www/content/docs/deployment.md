@@ -161,7 +161,7 @@ Add a health check endpoint:
 // app/api/health/route.ts
 import { route } from "@ademattos/bunbox";
 
-export const GET = route.handle(async () => {
+export const healthCheck = route.get().handle(async () => {
   return { status: "ok", timestamp: Date.now() };
 });
 ```

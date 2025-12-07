@@ -55,7 +55,7 @@ Create API endpoints with full type safety and validation:
 
 ```typescript
 // app/api/users/route.ts
-export const GET = route.handle(async (ctx) => {
+export const listUsers = route.get().handle(async (ctx) => {
   return { users: [] };
 });
 ```

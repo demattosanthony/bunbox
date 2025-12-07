@@ -9,9 +9,9 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<"admin" | "user" | "">("");
   const [enabled, setEnabled] = useState(true);
 
-  // Demonstrate useQuery with dynamic query parameters
-  const { data, loading, error, refetch } = api.users.GET.useQuery({
-    query: roleFilter ? { role: roleFilter } : {},
+  // Demonstrate useQuery with dynamic query parameters (flattened options)
+  const { data, loading, error, refetch } = api.users.listUsers.useQuery({
+    ...(roleFilter ? { role: roleFilter } : {}),
     enabled,
   });
 
@@ -192,7 +192,7 @@ export default function UsersPage() {
                 marginTop: "1rem",
               }}
             >
-              {data.users.map((user) => (
+              {data.users.map((user: { id: string; name: string; email: string; role: string }) => (
                 <div
                   key={user.id}
                   style={{
@@ -252,9 +252,9 @@ export default function UsersPage() {
               fontFamily: "monospace",
             }}
           >
-            {`const { data, loading, error, refetch } = api.users.GET.useQuery({
-  query: { role: "admin" }, // optional query params
-  enabled: true,             // conditional fetching
+            {`const { data, loading, error, refetch } = api.users.listUsers.useQuery({
+  role: "admin",   // query params are flattened
+  enabled: true,   // conditional fetching
 });`}
           </pre>
         </div>

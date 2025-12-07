@@ -1,6 +1,6 @@
 {
   "name": "create-bunbox",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Create a new Bunbox project with a single command",
   "author": "Anthony Demattos",
   "license": "MIT",

@@ -17,9 +17,12 @@ const logger = async (ctx) => {
   // Return nothing to continue
 };
 
-export const GET = route.use(logger).handle(async (ctx) => {
-  return { message: "Hello" };
-});
+export const getMessage = route
+  .get()
+  .use(logger)
+  .handle(async (ctx) => {
+    return { message: "Hello" };
+  });
 ```
 
 ## Adding Context
@@ -40,10 +43,13 @@ const authMiddleware = async (ctx) => {
   };
 };
 
-export const GET = route.use(authMiddleware).handle(async (ctx) => {
-  // ctx.user is now available
-  return { user: ctx.user };
-});
+export const getCurrentUser = route
+  .get()
+  .use(authMiddleware)
+  .handle(async (ctx) => {
+    // ctx.user is now available
+    return { user: ctx.user };
+  });
 ```
 
 ## Multiple Middleware
@@ -60,7 +66,8 @@ const timing = async (ctx) => {
   return { requestTime: start };
 };
 
-export const GET = route
+export const getUserWithTiming = route
+  .get()
   .use(auth)
   .use(timing)
   .handle(async (ctx) => {
@@ -82,7 +89,8 @@ const requireAdmin = async (ctx) => {
   }
 };
 
-export const DELETE = route
+export const deleteResource = route
+  .delete()
   .use(authMiddleware)
   .use(requireAdmin)
   .handle(async (ctx) => {
@@ -107,10 +115,13 @@ const loadUser = async (ctx) => {
   return { user };
 };
 
-export const GET = route.use(loadUser).handle(async (ctx) => {
-  // ctx.user is loaded from database
-  return { user: ctx.user };
-});
+export const getUser = route
+  .get()
+  .use(loadUser)
+  .handle(async (ctx) => {
+    // ctx.user is loaded from database
+    return { user: ctx.user };
+  });
 ```
 
 ## Reusable Middleware
@@ -147,7 +158,8 @@ Use in routes:
 import { requireAuth } from "@/middleware/auth";
 import { cors } from "@/middleware/cors";
 
-export const GET = route
+export const getProtectedUser = route
+  .get()
   .use(cors)
   .use(requireAuth)
   .handle(async (ctx) => {
@@ -171,10 +183,13 @@ const optionalAuth = async (ctx) => {
   return { user: null };
 };
 
-export const GET = route.use(optionalAuth).handle(async (ctx) => {
-  if (ctx.user) {
-    return { message: `Hello, ${ctx.user.name}` };
-  }
-  return { message: "Hello, guest" };
-});
+export const getGreeting = route
+  .get()
+  .use(optionalAuth)
+  .handle(async (ctx) => {
+    if (ctx.user) {
+      return { message: `Hello, ${ctx.user.name}` };
+    }
+    return { message: "Hello, guest" };
+  });
 ```

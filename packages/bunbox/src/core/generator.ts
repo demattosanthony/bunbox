@@ -58,7 +58,10 @@ function insertRouteMethod(
 ): void {
   let current = node;
 
+  // Only traverse static segments, skip dynamic ones (starting with ":")
+  // This flattens routes like /users/:id to just /users with the handler attached
   for (const segment of segments) {
+    if (segment.startsWith(":")) continue;
     if (!current.children.has(segment)) {
       current.children.set(segment, createRouteTreeNode());
     }
@@ -217,7 +220,7 @@ export async function generateApiClient(
           importName,
           exportName,
           method,
-          typeAlias: `${importName}_${method}`,
+          typeAlias: `${importName}_${exportName}`,
         });
       }
     } catch (error) {
@@ -350,23 +353,61 @@ function generateClientCode(
     ""
   );
 
-  // Add helper to create API method with hooks
+  // Add helper to create API method with hooks - using flattened options
   lines.push(
-    "type ApiMethodOptions<TParams, TQuery, TBody> = { params?: TParams; query?: TQuery; body?: TBody; headers?: HeadersInit };",
+    "// Flattened options type - params, query, and body all at top level",
+    "// Exclude default Record<string, unknown> to avoid index signature conflicts",
+    "type IsDefaultRecord<T> = T extends Record<string, unknown>",
+    "  ? keyof T extends never ? true : string extends keyof T ? true : false",
+    "  : false;",
+    "type FlattenedOptions<TParams, TQuery, TBody> = ",
+    "  & (IsDefaultRecord<TParams> extends true ? {} : TParams)",
+    "  & (IsDefaultRecord<TQuery> extends true ? {} : TQuery)",
+    "  & (IsDefaultRecord<TBody> extends true ? {} : TBody)",
+    "  & { headers?: HeadersInit };",
     "",
     "type ApiMethod<TResponse, TParams, TQuery, TBody> = {",
-    "  (opts?: ApiMethodOptions<TParams, TQuery, TBody>): Promise<ClientResponse<TResponse>>;",
-    "  useQuery: (opts?: UseQueryOptions<TParams, TQuery, TBody>) => UseQueryResult<ClientResponse<TResponse>>;",
-    "  useStream: (opts?: UseStreamOptions<TParams, TQuery, TBody>) => UseStreamResult<TResponse extends { __type: infer U } ? U : TResponse>;",
+    "  (opts?: FlattenedOptions<TParams, TQuery, TBody>): Promise<ClientResponse<TResponse>>;",
+    "  useQuery: (opts?: FlattenedOptions<TParams, TQuery, TBody> & { enabled?: boolean }) => UseQueryResult<ClientResponse<TResponse>>;",
+    "  useStream: (opts?: FlattenedOptions<TParams, TQuery, TBody> & { enabled?: boolean; onMessage?: (data: any) => void; onError?: (error: Error) => void; onFinish?: () => void }) => UseStreamResult<TResponse extends { __type: infer U } ? U : TResponse>;",
     "};",
     "",
     "function createApiMethod<TResponse, TParams = Record<string, unknown>, TQuery = Record<string, unknown>, TBody = unknown>(",
     "  method: string,",
-    "  path: string",
+    "  path: string,",
+    "  paramKeys: string[]",
     "): ApiMethod<TResponse, TParams, TQuery, TBody> {",
-    "  const fn = (opts?: ApiMethodOptions<TParams, TQuery, TBody>) => request<TResponse, TParams, TQuery, TBody>(method, path, opts);",
-    "  fn.useQuery = (opts?: UseQueryOptions<TParams, TQuery, TBody>) => createQueryHook<ClientResponse<TResponse>>(method, path, opts);",
-    "  fn.useStream = (opts?: UseStreamOptions<TParams, TQuery, TBody>) => {",
+    "  // Separate flattened options into params/query/body based on method and paramKeys",
+    "  function separateOptions(opts?: Record<string, unknown>) {",
+    "    if (!opts) return {};",
+    "    const params: Record<string, unknown> = {};",
+    "    const query: Record<string, unknown> = {};",
+    "    const body: Record<string, unknown> = {};",
+    "    const headers = opts.headers as HeadersInit | undefined;",
+    "    const enabled = opts.enabled;",
+    "    ",
+    "    for (const [key, value] of Object.entries(opts)) {",
+    "      if (key === 'headers' || key === 'enabled' || key === 'onMessage' || key === 'onError' || key === 'onFinish') continue;",
+    "      if (paramKeys.includes(key)) {",
+    "        params[key] = value;",
+    "      } else if (method === 'GET' || method === 'DELETE') {",
+    "        query[key] = value;",
+    "      } else {",
+    "        body[key] = value;",
+    "      }",
+    "    }",
+    "    return { params, query, body, headers, enabled };",
+    "  }",
+    "  ",
+    "  const fn = (opts?: FlattenedOptions<TParams, TQuery, TBody>) => {",
+    "    const { params, query, body, headers } = separateOptions(opts as Record<string, unknown>);",
+    "    return request<TResponse, TParams, TQuery, TBody>(method, path, { params: params as TParams, query: query as TQuery, body: body as TBody, headers });",
+    "  };",
+    "  fn.useQuery = (opts?: FlattenedOptions<TParams, TQuery, TBody> & { enabled?: boolean }) => {",
+    "    const separated = separateOptions(opts as Record<string, unknown>);",
+    "    return createQueryHook<ClientResponse<TResponse>>(method, path, { params: separated.params, query: separated.query, body: separated.body, headers: separated.headers, enabled: separated.enabled as boolean | undefined });",
+    "  };",
+    "  fn.useStream = (opts?: FlattenedOptions<TParams, TQuery, TBody> & { enabled?: boolean; onMessage?: (data: any) => void; onError?: (error: Error) => void; onFinish?: () => void }) => {",
     "    type ExtractedType = TResponse extends { __type: infer U } ? U : TResponse;",
     "    return useStreamHook<ExtractedType>(fn, opts);",
     "  };",

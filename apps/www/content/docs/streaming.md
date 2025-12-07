@@ -11,9 +11,9 @@ Use the `stream()` function to create streaming responses:
 
 ```typescript
 // app/api/stream/route.ts
-import { stream, type StreamingResponse } from "@ademattos/bunbox";
+import { route, stream, type StreamingResponse } from "@ademattos/bunbox";
 
-export const GET = (): StreamingResponse<string> => {
+export const streamText = route.get().handle((): StreamingResponse<string> => {
   return stream(async function* () {
     const words = ["Hello", " ", "from", " ", "Bunbox"];
 
@@ -22,7 +22,7 @@ export const GET = (): StreamingResponse<string> => {
       await Bun.sleep(100);
     }
   });
-};
+});
 ```
 
 ## Server-Sent Events (SSE)
@@ -31,14 +31,14 @@ For structured data streaming, use `sse()` which automatically formats messages:
 
 ```typescript
 // app/api/updates/route.ts
-import { sse, type SSEResponse } from "@ademattos/bunbox";
+import { route, sse, type SSEResponse } from "@ademattos/bunbox";
 
 interface Update {
   message: string;
   progress: number;
 }
 
-export const GET = (): SSEResponse<Update> => {
+export const getUpdates = route.get().handle((): SSEResponse<Update> => {
   return sse(async function* () {
     for (let i = 0; i <= 100; i += 10) {
       yield {
@@ -48,7 +48,7 @@ export const GET = (): SSEResponse<Update> => {
       await Bun.sleep(500);
     }
   });
-};
+});
 ```
 
 ## Client-Side Usage with useStream
@@ -61,8 +61,8 @@ Use the `useStream` hook from the auto-generated API client:
 import { api } from "@/.bunbox/api-client";
 
 export default function StreamPage() {
-  const { data, latest, loading, error, start, abort } = 
-    api.stream.GET.useStream({
+  const { data, latest, loading, error, start, abort } =
+    api.stream.streamText.useStream({
       enabled: false, // Don't start automatically
       onMessage: (msg) => console.log("Received:", msg),
       onFinish: () => console.log("Stream finished"),
@@ -74,7 +74,7 @@ export default function StreamPage() {
       <button onClick={start} disabled={loading}>
         {loading ? "Streaming..." : "Start Stream"}
       </button>
-      
+
       {loading && <button onClick={abort}>Abort</button>}
 
       <div>
@@ -91,22 +91,22 @@ export default function StreamPage() {
 
 ## Hook Options
 
-The `useStream` hook accepts these options:
+The `useStream` hook accepts these options (all flattened):
 
 ```typescript
-const stream = api.endpoint.GET.useStream({
+const stream = api.updates.getUpdates.useStream({
   // Auto-start the stream (default: true)
   enabled: true,
-  
+
   // Callback when each message arrives
   onMessage: (data) => console.log(data),
-  
+
   // Callback when stream completes
   onFinish: () => console.log("Done"),
-  
+
   // Callback on error
   onError: (error) => console.error(error),
-  
+
   // Optional headers
   headers: { "Authorization": "Bearer token" },
 });
@@ -120,19 +120,19 @@ The hook returns:
 {
   // All received messages
   data: TResponse[],
-  
+
   // Most recent message
   latest: TResponse | null,
-  
+
   // Loading state
   loading: boolean,
-  
+
   // Error if any
   error: Error | undefined,
-  
+
   // Manually start the stream
   start: () => Promise<void>,
-  
+
   // Abort ongoing stream
   abort: () => void,
 }
@@ -144,10 +144,10 @@ The hook returns:
 
 ```typescript
 // Server
-export const GET = (): SSEResponse<{ progress: number; status: string }> => {
+export const trackProgress = route.get().handle((): SSEResponse<{ progress: number; status: string }> => {
   return sse(async function* () {
     const steps = ["Initializing", "Processing", "Finalizing", "Complete"];
-    
+
     for (let i = 0; i < steps.length; i++) {
       yield {
         progress: (i + 1) * 25,
@@ -156,12 +156,12 @@ export const GET = (): SSEResponse<{ progress: number; status: string }> => {
       await Bun.sleep(1000);
     }
   });
-};
+});
 ```
 
 ```tsx
 // Client
-const { data, latest } = api.progress.GET.useStream();
+const { data, latest } = api.progress.trackProgress.useStream();
 
 return (
   <div>
@@ -175,22 +175,25 @@ return (
 
 ```typescript
 // Server
-export const POST = (req: Request): SSEResponse<{ token: string }> => {
-  return sse(async function* () {
-    const response = await generateAIResponse(req.body);
-    
-    for await (const chunk of response) {
-      yield { token: chunk };
-    }
+export const generateText = route
+  .post()
+  .body(z.object({ prompt: z.string() }))
+  .handle(({ body }): SSEResponse<{ token: string }> => {
+    return sse(async function* () {
+      const response = await generateAIResponse(body.prompt);
+
+      for await (const chunk of response) {
+        yield { token: chunk };
+      }
+    });
   });
-};
 ```
 
 ```tsx
-// Client
-const { data, loading, start } = api.ai.generate.POST.useStream({
+// Client - body fields are flattened
+const { data, loading, start } = api.ai.generateText.useStream({
   enabled: false,
-  body: { prompt: "Write a story" },
+  prompt: "Write a story",  // Flattened, not { body: { prompt } }
 });
 
 return (
@@ -205,15 +208,15 @@ return (
 
 ```typescript
 // Server
-export const GET = (): StreamingResponse<string> => {
+export const streamLogs = route.get().handle((): StreamingResponse<string> => {
   return stream(async function* () {
     const logs = await fetchLogs();
-    
+
     for (const log of logs) {
       yield `[${log.timestamp}] ${log.message}\n`;
     }
   });
-};
+});
 ```
 
 ## Type Safety
@@ -222,16 +225,16 @@ Both `stream()` and `sse()` return phantom types that the API client generator r
 
 ```typescript
 // Server
-export const GET = (): SSEResponse<{ count: number }> => {
+export const countStream = route.get().handle((): SSEResponse<{ count: number }> => {
   return sse(async function* () {
     for (let i = 0; i < 10; i++) {
       yield { count: i };
     }
   });
-};
+});
 
 // Client - automatically typed!
-const { data } = api.endpoint.GET.useStream();
+const { data } = api.counter.countStream.useStream();
 // data is typed as Array<{ count: number }>
 ```
 
@@ -240,7 +243,7 @@ const { data } = api.endpoint.GET.useStream();
 You can also consume streams manually:
 
 ```typescript
-const response = await api.endpoint.GET();
+const response = await api.stream.streamText();
 
 for await (const message of response) {
   console.log(message);
@@ -252,7 +255,7 @@ for await (const message of response) {
 Streams can be aborted using the `abort()` function:
 
 ```tsx
-const { abort, loading } = api.stream.GET.useStream();
+const { abort, loading } = api.stream.streamText.useStream();
 
 if (loading) {
   return <button onClick={abort}>Cancel</button>;
@@ -264,7 +267,7 @@ if (loading) {
 Handle stream errors gracefully:
 
 ```tsx
-const { error } = api.stream.GET.useStream({
+const { error } = api.stream.streamText.useStream({
   onError: (err) => {
     // Log to error service
     console.error(err);
@@ -275,4 +278,3 @@ if (error) {
   return <div>Failed to load stream: {error.message}</div>;
 }
 ```
-

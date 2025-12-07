@@ -4,6 +4,15 @@
 
 export const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 
+/**
+ * Extract param keys from path pattern
+ * e.g., "/api/users/[id]/posts/[postId]" -> ["id", "postId"]
+ */
+export function extractParamKeysFromPath(path: string): string[] {
+  const matches = path.match(/\[([^\]]+)\]/g) || [];
+  return matches.map((m) => m.slice(1, -1));
+}
+
 export interface ApiRouteMethodMeta {
   path: string;
   /** The module import name (e.g., Route0) */
@@ -50,6 +59,7 @@ export function generateTypeAliases(node: ApiRouteTreeNode): string[] {
 
 /**
  * Build API object structure with proper types
+ * Uses handler export names as keys instead of HTTP methods
  */
 export function buildApiObject(
   node: ApiRouteTreeNode,
@@ -60,8 +70,10 @@ export function buildApiObject(
   const blocks: string[][] = [];
 
   for (const meta of node.methods) {
+    const paramKeys = extractParamKeysFromPath(meta.path);
+    const paramKeysLiteral = JSON.stringify(paramKeys);
     blocks.push([
-      `${indentStr}${meta.method}: createApiMethod<${meta.typeAlias}_Response, ${meta.typeAlias}_Params, ${meta.typeAlias}_Query, ${meta.typeAlias}_Body>("${meta.method}", "${meta.path}")`,
+      `${indentStr}${meta.exportName}: createApiMethod<${meta.typeAlias}_Response, ${meta.typeAlias}_Params, ${meta.typeAlias}_Query, ${meta.typeAlias}_Body>("${meta.method}", "${meta.path}", ${paramKeysLiteral})`,
     ]);
   }
 

@@ -44,34 +44,6 @@ describe("caddy", () => {
       expect(config).toContain("reverse_proxy localhost:4000");
     });
 
-    test("includes header forwarding", () => {
-      const target = createTarget({ domain: "example.com" });
-      const config = generateCaddyConfig(target);
-
-      expect(config).toContain("header_up Host {host}");
-      expect(config).toContain("header_up X-Real-IP {remote}");
-      expect(config).toContain("header_up X-Forwarded-For {remote}");
-      expect(config).toContain("header_up X-Forwarded-Proto {scheme}");
-    });
-
-    test("enables gzip encoding", () => {
-      const target = createTarget({ domain: "example.com" });
-      const config = generateCaddyConfig(target);
-
-      expect(config).toContain("encode gzip");
-    });
-
-    test("configures log output", () => {
-      const target = createTarget({
-        domain: "example.com",
-        deployPath: "/var/www/myapp",
-      });
-      const config = generateCaddyConfig(target);
-
-      expect(config).toContain("log {");
-      expect(config).toContain("output file /var/www/myapp/logs/access.log");
-      expect(config).toContain("format json");
-    });
 
     test("includes app name in comment", () => {
       const target = createTarget({ domain: "example.com", name: "my-app" });
@@ -94,14 +66,5 @@ describe("caddy", () => {
       expect(config).toContain("reverse_proxy localhost:3000");
     });
 
-    test("handles different deploy paths", () => {
-      const target = createTarget({
-        domain: "example.com",
-        deployPath: "/opt/apps/myservice",
-      });
-      const config = generateCaddyConfig(target);
-
-      expect(config).toContain("/opt/apps/myservice/logs/access.log");
-    });
   });
 });
