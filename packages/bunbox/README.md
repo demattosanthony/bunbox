@@ -2,62 +2,31 @@
 
 # 📦 Bunbox
 
-For something between [Next.js](https://github.com/vercel/next.js) and [tRPC](https://github.com/trpc/trpc).
+A full-stack TypeScript framework built on [Bun](https://bun.sh). File-based routing, type-safe APIs, and real-time WebSockets.
 
 [![npm version](https://img.shields.io/npm/v/@ademattos/bunbox.svg)](https://www.npmjs.com/package/@ademattos/bunbox)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/tinyboxe/bunbox/blob/main/LICENSE)
+
+[Documentation](https://bunbox.anthonydemattos.com/docs/introduction)
 
 </div>
 
 ---
 
-Bunbox is a full-stack web framework built on [Bun](https://bun.sh):
-
-- **File-based routing** - pages, APIs, and sockets
-- **Type-safe APIs** - auto-generated typed client
-- **Real-time sockets** - WebSocket servers with protocol types
-- **SSR with React** - server-side rendering built-in
-- **Background workers** - web workers for heavy tasks
+- **File-based routing** for pages, APIs, and WebSockets
+- **Type-safe APIs** with auto-generated typed client
+- **Real-time WebSockets** with typed protocols and React hooks
+- **Server-side rendering** with React
+- **Background jobs** with cron scheduling
 - **Zero config** - works out of the box
 
-It's inspired by Next.js (file-based routing), tRPC (end-to-end type safety), and Socket.io (real-time), but stays intentionally tiny and hackable.
-
 ---
 
-## How Bunbox compares
-
-**Next.js**
-
-- ✅ Similar: file-based routing (`app/about/page.tsx`), API routes, React SSR
-- ✅ You can build full-stack apps with familiar patterns
-- 🔁 Unlike Next.js, the entire framework is ~3,000 lines and fully understandable
-
-**tRPC**
-
-- ✅ End-to-end type safety from server to client
-- ✅ Auto-generated typed client for all your APIs
-- 🔁 Simpler: uses file-based routing instead of procedure builders
-
-**Socket.io**
-
-- ✅ WebSocket servers with event-based messaging
-- ✅ Built-in room/broadcast support
-- 🔁 Fully type-safe protocols and React hooks for the client
-
----
-
-## Installation
+## Getting Started
 
 ```bash
-bun add @ademattos/bunbox
-```
-
-Or try an example:
-
-```bash
-git clone https://github.com/demattosanthony/bunbox.git
-cd bunbox/examples/basic
-bun install
+bun create bunbox my-app
+cd my-app
 bun dev
 ```
 
@@ -99,7 +68,8 @@ import { z } from "zod";
 const Params = z.object({ id: z.string() });
 const Query = z.object({ include: z.string().optional() });
 
-export const GET = route
+export const getUser = route
+  .get()
   .params(Params)
   .query(Query)
   .handle(({ params, query }) => ({
@@ -116,7 +86,7 @@ Use it from the client with full type safety:
 import { api } from "@ademattos/bunbox/client";
 
 export default function Profile() {
-  const { data } = api.user[":id"].GET.useQuery({
+  const { data } = api.user[":id"].getUser.useQuery({
     params: { id: "123" },
     query: { include: "email" }, // fully typed!
   });
@@ -182,21 +152,12 @@ See [examples/basic/app/chat](./examples/basic/app/chat) for a complete chat app
 
 ## Why Bunbox?
 
-**For Next.js users**
+- **Fast to start** - Zero config. Create a project and start building.
+- **Fast to run** - Built on Bun with sub-millisecond startup.
+- **Type-safe by default** - Types flow from server to client automatically.
+- **Small and readable** - The entire framework is small enough to understand.
 
-You want file-based routing and React SSR, but you don't need all of Next.js. You want something you can read and understand in an afternoon plus a fast development server.
-
-**For tRPC users**
-
-You want end-to-end type safety, but you prefer file-based routing over procedure builders. You want API routes that feel like REST but work like RPC.
-
-**For Socket.io users**
-
-You want real-time WebSockets with clean abstractions, but you also want type safety and React hooks that just work.
-
-**For everyone**
-
-You want a framework that's small enough to understand completely, but powerful enough to build real apps. No magic, no complexity - just files become routes, types flow through automatically.
+Bunbox combines patterns from Next.js (file-based routing), tRPC (end-to-end types), and Socket.io (real-time) into a single, minimal framework.
 
 ---
 

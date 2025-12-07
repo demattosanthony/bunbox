@@ -187,9 +187,11 @@ export async function resolveConfig(
   development: boolean = true
 ): Promise<ResolvedBunboxConfig> {
   const fileConfig = await loadConfigFile();
+  const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
 
   return {
-    port: cliConfig.port ?? fileConfig.port ?? defaults.port,
+    // Priority: CLI > env var (for deployment) > config file > defaults
+    port: cliConfig.port ?? envPort ?? fileConfig.port ?? defaults.port,
     hostname: cliConfig.hostname ?? fileConfig.hostname ?? defaults.hostname,
     appDir: cliConfig.appDir ?? fileConfig.appDir ?? defaults.appDir,
     wsDir: cliConfig.wsDir ?? fileConfig.wsDir ?? defaults.wsDir,

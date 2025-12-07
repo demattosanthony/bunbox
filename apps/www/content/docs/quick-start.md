@@ -7,9 +7,8 @@ order: 3
 ## Create a Project
 
 ```bash
-bunx create-bunbox my-blog
+bun create bunbox my-blog
 cd my-blog
-bun install
 ```
 
 ## Create a Home Page

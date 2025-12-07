@@ -14,7 +14,7 @@ curl -fsSL https://bun.sh/install | bash
 
 ## Create a New Project
 
-The fastest way to get started is with `bun create`:
+Create a new project with `bun create`:
 
 ```bash
 bun create bunbox my-app

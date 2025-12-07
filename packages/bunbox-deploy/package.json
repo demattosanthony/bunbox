@@ -1,6 +1,6 @@
 {
   "name": "bunbox-deploy",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Deploy Bunbox apps to VPS servers via SSH with automatic HTTPS",
   "author": "Anthony Demattos",
   "license": "MIT",

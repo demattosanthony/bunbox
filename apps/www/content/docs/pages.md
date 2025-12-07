@@ -50,7 +50,7 @@ By default, pages are client-side rendered. Add `"use server"` directive for ser
 ```tsx
 "use server";
 
-export default function ServerPage() {
+export default async function ServerPage() {
   const data = await fetchData(); // Server-side data fetching
   return <div>{data}</div>;
 }

@@ -11,7 +11,7 @@ import {
   configureCaddy,
   isCaddyInstalled,
   printDNSInstructions,
-  isDomainConfigured,
+  checkPortConflict,
 } from "./caddy";
 import { Spinner, log, printHeader, formatKV, generateReleaseId } from "./utils";
 import pc from "picocolors";
@@ -214,20 +214,19 @@ export async function deploy(
     }
 
     // 11. Configure Caddy if domain is set
-    if (target.domain && ssh) {
-      const alreadyConfigured = await isDomainConfigured(ssh, target.domain);
+    if (target.domain && ssh && !dryRun) {
+      spinner.start("Configuring Caddy...");
+      const { changed, isFirstDeploy } = await configureCaddy(ssh, target);
 
-      if (!alreadyConfigured) {
-        spinner.start("Configuring Caddy...");
-        if (!dryRun) {
-          await configureCaddy(ssh, target);
-        }
-        spinner.succeed("Caddy configured");
+      spinner.succeed(changed ? "Caddy configured" : "Caddy unchanged");
 
-        // Get server IP and print DNS instructions
+      if (changed && isFirstDeploy) {
         const serverIP = await ssh.getPublicIP();
         printDNSInstructions(target.domain, serverIP);
       }
+    } else if (target.domain && dryRun) {
+      spinner.start("Configuring Caddy...");
+      spinner.succeed("Caddy configured (dry run)");
     }
 
     // 12. Cleanup old releases
@@ -273,6 +272,16 @@ async function preflightChecks(
     const hasCaddy = await isCaddyInstalled(ssh);
     if (!hasCaddy) {
       spinner.warn("Caddy not installed - skipping HTTPS setup");
+    } else {
+      // Check for port conflicts with other apps
+      const conflict = await checkPortConflict(ssh, target);
+      if (conflict) {
+        throw new Error(
+          `Port ${target.port} is already used by "${conflict}".\n` +
+            `Set a different port in bunbox.deploy.ts:\n\n` +
+            `  port: ${target.port + 1}`
+        );
+      }
     }
   }
 
