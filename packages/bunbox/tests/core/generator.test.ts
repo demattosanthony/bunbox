@@ -14,6 +14,19 @@ const TEST_DIR = join(import.meta.dir, "..", "fixtures", "test-app");
 const APP_DIR = join(TEST_DIR, "app");
 const BUNBOX_DIR = join(TEST_DIR, ".bunbox");
 
+// Helper to create route file content with new syntax
+const createRouteContent = (methods: string[]) => {
+  const imports = `import { route } from "${join(import.meta.dir, "..", "..", "src", "core", "route")}";`;
+  const exports = methods
+    .map((method) => {
+      const exportName =
+        method.toLowerCase() + "Handler" + Math.random().toString(36).slice(2, 6);
+      return `export const ${exportName} = route.${method.toLowerCase()}().handle(() => new Response("${method}"));`;
+    })
+    .join("\n");
+  return `${imports}\n${exports}`;
+};
+
 describe("generator", () => {
   beforeEach(async () => {
     // Create test app directory structure
@@ -337,11 +350,11 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
     });
 
     test("generates API client for simple GET route", async () => {
-      // Create simple API route
+      // Create simple API route with new syntax
       await mkdir(join(APP_DIR, "api", "health"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "health", "route.ts"),
-        `export const GET = () => new Response("OK");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -370,9 +383,7 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
       await mkdir(join(APP_DIR, "api", "users"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "users", "route.ts"),
-        `export const GET = () => new Response("GET");
-export const POST = () => new Response("POST");
-export const DELETE = () => new Response("DELETE");`
+        createRouteContent(["GET", "POST", "DELETE"])
       );
 
       const originalCwd = process.cwd();
@@ -399,7 +410,7 @@ export const DELETE = () => new Response("DELETE");`
       await mkdir(join(APP_DIR, "api", "v1", "users"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "v1", "users", "route.ts"),
-        `export const GET = () => new Response("GET");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -425,7 +436,7 @@ export const DELETE = () => new Response("DELETE");`
       await mkdir(join(APP_DIR, "api", "users", "[id]"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "users", "[id]", "route.ts"),
-        `export const GET = () => new Response("GET");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -449,11 +460,13 @@ export const DELETE = () => new Response("DELETE");`
     test("generates type aliases for typed API routes", async () => {
       // Create typed API route using route builder
       await mkdir(join(APP_DIR, "api", "users"), { recursive: true });
+      const routePath = join(import.meta.dir, "..", "..", "src", "core", "route");
       await writeFile(
         join(APP_DIR, "api", "users", "route.ts"),
-        `import { route } from "bunbox";
+        `import { route } from "${routePath}";
 const UsersSchema = { parse: () => ({ users: [] as string[] }) };
-export const GET = route
+export const listUsers = route
+  .get()
   .body(UsersSchema)
   .handle(({ body }) => body);`
       );
@@ -482,7 +495,7 @@ export const GET = route
       await mkdir(join(APP_DIR, "api", "root"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "root", "route.ts"),
-        `export const GET = () => new Response("ROOT");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -507,12 +520,12 @@ export const GET = route
       await mkdir(join(APP_DIR, "api", "zebra"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "zebra", "route.ts"),
-        `export const GET = () => new Response("zebra");`
+        createRouteContent(["GET"])
       );
       await mkdir(join(APP_DIR, "api", "apple"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "apple", "route.ts"),
-        `export const GET = () => new Response("apple");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -537,7 +550,7 @@ export const GET = route
       await mkdir(join(APP_DIR, "api", "test"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "test", "route.ts"),
-        `export const GET = () => new Response("test");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -553,6 +566,7 @@ export const GET = route
           publicDir: join(TEST_DIR, "public"),
           development: false,
           cors: null,
+          openapi: null,
         });
 
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
@@ -620,7 +634,7 @@ export const GET = route
       await mkdir(join(APP_DIR, "api", "test"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "test", "route.ts"),
-        `export const GET = () => new Response("TEST");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -648,7 +662,7 @@ export const GET = route
       await mkdir(join(APP_DIR, "api", "data"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "data", "route.ts"),
-        `export const GET = () => new Response("DATA");`
+        createRouteContent(["GET"])
       );
 
       const originalCwd = process.cwd();
@@ -682,8 +696,7 @@ export const GET = route
       await mkdir(join(APP_DIR, "api", "items"), { recursive: true });
       await writeFile(
         join(APP_DIR, "api", "items", "route.ts"),
-        `export const GET = () => new Response("ITEMS");
-export const POST = () => new Response("CREATED");`
+        createRouteContent(["GET", "POST"])
       );
 
       const originalCwd = process.cwd();
@@ -711,12 +724,15 @@ export const POST = () => new Response("CREATED");`
     test("generates correct types for streaming responses", async () => {
       // Create streaming API route
       await mkdir(join(APP_DIR, "api", "stream"), { recursive: true });
+      const routePath = join(import.meta.dir, "..", "..", "src", "core", "route");
+      const typesPath = join(import.meta.dir, "..", "..", "src", "core", "types");
       await writeFile(
         join(APP_DIR, "api", "stream", "route.ts"),
-        `import type { SSEResponse } from "bunbox";
-export const GET = (): SSEResponse<{ token: string }> => {
-  return null as any; // Mock implementation
-};`
+        `import { route, sse } from "${routePath}";
+import type { SSEResponse } from "${typesPath}";
+export const streamHandler = route.get().handle((): SSEResponse<{ token: string }> => {
+  return sse(async function* () { yield { token: "test" }; });
+});`
       );
 
       const originalCwd = process.cwd();
@@ -727,11 +743,6 @@ export const GET = (): SSEResponse<{ token: string }> => {
 
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
-
-        // Should extract return type from direct function exports
-        expect(apiClientContent).toContain(
-          "Awaited<ReturnType<typeof Route0.GET>>"
-        );
 
         // Should have useStream with proper type extraction
         expect(apiClientContent).toContain(
@@ -751,12 +762,14 @@ export const GET = (): SSEResponse<{ token: string }> => {
       }
     });
 
-    test("generates fallback to ReturnType for direct function exports", async () => {
-      // Create route with direct function export
+    test("generates type aliases using exportName for new syntax routes", async () => {
+      // Create route with new syntax
       await mkdir(join(APP_DIR, "api", "direct"), { recursive: true });
+      const routePath = join(import.meta.dir, "..", "..", "src", "core", "route");
       await writeFile(
         join(APP_DIR, "api", "direct", "route.ts"),
-        `export const GET = async () => new Response(JSON.stringify({ id: 1 }));`
+        `import { route } from "${routePath}";
+export const fetchData = route.get().handle(async () => ({ id: 1 }));`
       );
 
       const originalCwd = process.cwd();
@@ -768,10 +781,8 @@ export const GET = (): SSEResponse<{ token: string }> => {
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
         const apiClientContent = await apiClientFile.text();
 
-        // Should have type extraction that handles both __types and ReturnType
-        expect(apiClientContent).toContain(
-          "typeof Route0.GET extends { __types: { response: infer T } } ? T : Awaited<ReturnType<typeof Route0.GET>>"
-        );
+        // Should have type extraction that references the exportName (fetchData)
+        expect(apiClientContent).toContain("typeof Route0.fetchData extends { __types:");
       } finally {
         process.chdir(originalCwd);
       }

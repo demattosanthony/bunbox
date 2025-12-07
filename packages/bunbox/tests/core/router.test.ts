@@ -14,6 +14,11 @@ import {
 } from "../../src/core/router";
 import type { Route } from "../../src/core/types";
 
+/** Helper to create a Request from a URL string for matchRoute tests */
+function createRequest(url: string): Request {
+  return new Request(url);
+}
+
 describe("router", () => {
   describe("filePathToRoute", () => {
     test("converts root page route", () => {
@@ -89,7 +94,7 @@ describe("router", () => {
   describe("matchRoute", () => {
     test("matches simple route", () => {
       const route = filePathToRoute("about/page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/about", route);
+      const match = matchRoute(createRequest("http://localhost:3000/about"), route);
       expect(match).not.toBeNull();
       expect(match?.params).toEqual({});
       expect(match?.query).toEqual({});
@@ -97,14 +102,14 @@ describe("router", () => {
 
     test("extracts single param", () => {
       const route = filePathToRoute("blog/[slug]/page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/blog/hello-world", route);
+      const match = matchRoute(createRequest("http://localhost:3000/blog/hello-world"), route);
       expect(match).not.toBeNull();
       expect(match?.params).toEqual({ slug: "hello-world" });
     });
 
     test("extracts multiple params", () => {
       const route = filePathToRoute("blog/[category]/[slug]/page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/blog/tech/hello", route);
+      const match = matchRoute(createRequest("http://localhost:3000/blog/tech/hello"), route);
       expect(match).not.toBeNull();
       expect(match?.params).toEqual({ category: "tech", slug: "hello" });
     });
@@ -112,7 +117,7 @@ describe("router", () => {
     test("extracts query parameters", () => {
       const route = filePathToRoute("search/page.tsx", "page");
       const match = matchRoute(
-        "http://localhost:3000/search?q=test&limit=10",
+        createRequest("http://localhost:3000/search?q=test&limit=10"),
         route
       );
       expect(match).not.toBeNull();
@@ -122,7 +127,7 @@ describe("router", () => {
     test("extracts both params and query", () => {
       const route = filePathToRoute("blog/[slug]/page.tsx", "page");
       const match = matchRoute(
-        "http://localhost:3000/blog/hello?preview=true",
+        createRequest("http://localhost:3000/blog/hello?preview=true"),
         route
       );
       expect(match).not.toBeNull();
@@ -132,19 +137,19 @@ describe("router", () => {
 
     test("returns null for non-matching route", () => {
       const route = filePathToRoute("about/page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/contact", route);
+      const match = matchRoute(createRequest("http://localhost:3000/contact"), route);
       expect(match).toBeNull();
     });
 
     test("returns null for partial match", () => {
       const route = filePathToRoute("blog/page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/blog/extra", route);
+      const match = matchRoute(createRequest("http://localhost:3000/blog/extra"), route);
       expect(match).toBeNull();
     });
 
     test("handles root route", () => {
       const route = filePathToRoute("page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/", route);
+      const match = matchRoute(createRequest("http://localhost:3000/"), route);
       expect(match).not.toBeNull();
       expect(match?.params).toEqual({});
     });
@@ -152,14 +157,14 @@ describe("router", () => {
     test("handles URL with trailing slash", () => {
       const route = filePathToRoute("about/page.tsx", "page");
       // Route patterns don't match trailing slashes
-      const match = matchRoute("http://localhost:3000/about/", route);
+      const match = matchRoute(createRequest("http://localhost:3000/about/"), route);
       expect(match).toBeNull();
     });
 
     test("handles special characters in params", () => {
       const route = filePathToRoute("blog/[slug]/page.tsx", "page");
       const match = matchRoute(
-        "http://localhost:3000/blog/hello-world_2024",
+        createRequest("http://localhost:3000/blog/hello-world_2024"),
         route
       );
       expect(match).not.toBeNull();
@@ -168,9 +173,22 @@ describe("router", () => {
 
     test("handles empty query values", () => {
       const route = filePathToRoute("search/page.tsx", "page");
-      const match = matchRoute("http://localhost:3000/search?q=", route);
+      const match = matchRoute(createRequest("http://localhost:3000/search?q="), route);
       expect(match).not.toBeNull();
       expect(match?.query).toEqual({ q: "" });
+    });
+
+    test("handles relative URL with host header (proxy scenario)", () => {
+      // Simulate what happens behind a reverse proxy where req.url is relative
+      const route = filePathToRoute("about/page.tsx", "page");
+      const req = new Request("http://proxy/about", {
+        headers: { host: "example.com" },
+      });
+      // Override the URL to simulate relative path (proxy behavior)
+      Object.defineProperty(req, "url", { value: "/about" });
+      const match = matchRoute(req, route);
+      expect(match).not.toBeNull();
+      expect(match?.params).toEqual({});
     });
   });
 

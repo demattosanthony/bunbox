@@ -16,6 +16,7 @@ const commands = [
   "status",
   "rollback",
   "setup",
+  "setup-git",
   "logs",
   "ssh",
 ];
@@ -99,6 +100,7 @@ function printHelp() {
     status [target]        Show deployment status
     rollback [target]      Rollback to previous deployment
     setup [target]         Setup server (install Bun, PM2, Caddy)
+    setup-git [target]     Test git repo access and setup deploy key
     logs [target]          View application logs
     ssh [target]           SSH into the server
 

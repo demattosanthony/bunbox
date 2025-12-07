@@ -16,10 +16,9 @@ export function generateEcosystemConfig(target: ResolvedTarget): string {
   return `module.exports = {
   apps: [{
     name: "${target.name}",
-    script: "bunbox",
-    args: "start",
+    script: "bun",
+    args: "run ${target.script}",
     cwd: "${target.deployPath}/current",
-    interpreter: "bun",
     env: {
       PORT: ${target.port},
       NODE_ENV: "production",

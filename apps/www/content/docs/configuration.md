@@ -69,6 +69,34 @@ Enable development mode with hot reload.
 
 This is automatically set based on the command you run (`bun dev` vs `bun start`).
 
+### openapi
+
+Configure OpenAPI/Swagger documentation generation.
+
+- Type: `object`
+- Default: `undefined` (disabled)
+
+```typescript
+export default defineConfig({
+  openapi: {
+    enabled: true,
+    path: "/api/docs",           // Where to serve docs
+    title: "My API",             // API title
+    version: "1.0.0",            // API version
+    description: "API description",
+    servers: [
+      { url: "https://api.example.com", description: "Production" },
+    ],
+  },
+});
+```
+
+When enabled, serves:
+- **Swagger UI** at `/api/docs`
+- **OpenAPI spec** at `/api/docs/openapi.json`
+
+See [OpenAPI & Swagger](/docs/openapi) for full documentation.
+
 ## Environment Variables
 
 Use `.env` files for environment-specific configuration:

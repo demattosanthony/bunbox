@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bunbox dev",
     "build": "bunbox build",
-    "start": "bunbox start"
+    "start": "bunbox start",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ademattos/bunbox": "workspace:*",

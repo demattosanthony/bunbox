@@ -12,14 +12,37 @@ import { dynamicImport, resolveAbsolutePath } from "./utils";
 import {
   buildApiObject,
   generateTypeAliases,
-  HTTP_METHODS,
 } from "./generator/type-helpers";
 import type {
   ApiRouteTreeNode,
   ApiRouteMethodMeta,
 } from "./generator/type-helpers";
-import type { ApiRouteModule } from "./types";
 import type { ResolvedBunboxConfig } from "./config";
+
+/**
+ * Extract handlers with __method from a route module
+ * Returns array of [exportName, method] pairs
+ */
+function extractMethodHandlers(
+  module: Record<string, unknown>
+): Array<{ exportName: string; method: string }> {
+  const handlers: Array<{ exportName: string; method: string }> = [];
+
+  for (const [exportName, value] of Object.entries(module)) {
+    if (
+      typeof value === "function" &&
+      "__method" in value &&
+      typeof (value as { __method: unknown }).__method === "string"
+    ) {
+      handlers.push({
+        exportName,
+        method: (value as { __method: string }).__method,
+      });
+    }
+  }
+
+  return handlers;
+}
 
 function createRouteTreeNode(): ApiRouteTreeNode {
   return {
@@ -168,10 +191,13 @@ export async function generateApiClient(
   for (const route of apiRoutes) {
     try {
       const absolutePath = resolveAbsolutePath(join(appDir, route.filepath));
-      const module = await dynamicImport<ApiRouteModule>(absolutePath, false);
-      const availableMethods = HTTP_METHODS.filter((method) => module[method]);
+      const module = await dynamicImport<Record<string, unknown>>(
+        absolutePath,
+        false
+      );
+      const handlers = extractMethodHandlers(module);
 
-      if (availableMethods.length === 0) continue;
+      if (handlers.length === 0) continue;
 
       // Get clean paths
       const routePath = toBunRoutePath(route);
@@ -185,10 +211,11 @@ export async function generateApiClient(
         `import type * as ${importName} from "../app/${route.filepath}";`
       );
 
-      for (const method of availableMethods) {
+      for (const { exportName, method } of handlers) {
         insertRouteMethod(routeTree, segments, {
           path: urlPath,
           importName,
+          exportName,
           method,
           typeAlias: `${importName}_${method}`,
         });

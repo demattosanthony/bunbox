@@ -41,6 +41,7 @@ const navigation: NavItem[] = [
       { title: "Middleware", href: "/docs/middleware" },
       { title: "Validation", href: "/docs/validation" },
       { title: "Streaming", href: "/docs/streaming" },
+      { title: "OpenAPI & Swagger", href: "/docs/openapi" },
     ],
   },
   {
@@ -57,6 +58,7 @@ const navigation: NavItem[] = [
     href: "/docs/configuration",
     items: [
       { title: "Configuration", href: "/docs/configuration" },
+      { title: "Jobs", href: "/docs/jobs" },
       { title: "Deployment", href: "/docs/deployment" },
       { title: "Workers", href: "/docs/workers" },
     ],

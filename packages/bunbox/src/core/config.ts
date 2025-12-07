@@ -22,6 +22,24 @@ export interface CorsConfig {
   maxAge?: number;
 }
 
+/**
+ * OpenAPI documentation configuration
+ */
+export interface OpenAPIConfig {
+  /** Enable OpenAPI endpoints (default: false) */
+  enabled?: boolean;
+  /** Base path for docs endpoints (default: '/api/docs') */
+  path?: string;
+  /** API title */
+  title?: string;
+  /** API version */
+  version?: string;
+  /** API description */
+  description?: string;
+  /** Server URLs */
+  servers?: Array<{ url: string; description?: string }>;
+}
+
 export interface BunboxConfig {
   port?: number;
   hostname?: string;
@@ -31,6 +49,8 @@ export interface BunboxConfig {
   publicDir?: string;
   /** CORS configuration. Set to true for permissive defaults, or configure specific options */
   cors?: CorsConfig | boolean;
+  /** OpenAPI documentation. Set to true for defaults, or configure specific options */
+  openapi?: OpenAPIConfig | boolean;
 }
 
 /**
@@ -45,6 +65,18 @@ export interface ResolvedCorsConfig {
   maxAge: number;
 }
 
+/**
+ * Resolved OpenAPI configuration with defaults applied
+ */
+export interface ResolvedOpenAPIConfig {
+  enabled: boolean;
+  path: string;
+  title: string;
+  version: string;
+  description?: string;
+  servers?: Array<{ url: string; description?: string }>;
+}
+
 export interface ResolvedBunboxConfig {
   port: number;
   hostname: string;
@@ -54,6 +86,7 @@ export interface ResolvedBunboxConfig {
   publicDir: string;
   development: boolean;
   cors: ResolvedCorsConfig | null;
+  openapi: ResolvedOpenAPIConfig | null;
 }
 
 /**
@@ -87,9 +120,37 @@ function resolveCorsConfig(
 }
 
 /**
+ * Default OpenAPI configuration (used when openapi: true)
+ */
+const defaultOpenAPI: ResolvedOpenAPIConfig = {
+  enabled: true,
+  path: "/api/docs",
+  title: "Bunbox API",
+  version: "1.0.0",
+};
+
+/**
+ * Resolve OpenAPI config from user input
+ */
+function resolveOpenAPIConfig(
+  openapi: OpenAPIConfig | boolean | undefined
+): ResolvedOpenAPIConfig | null {
+  if (!openapi) return null;
+  if (openapi === true) return defaultOpenAPI;
+  return {
+    enabled: openapi.enabled ?? true,
+    path: openapi.path ?? defaultOpenAPI.path,
+    title: openapi.title ?? defaultOpenAPI.title,
+    version: openapi.version ?? defaultOpenAPI.version,
+    description: openapi.description,
+    servers: openapi.servers,
+  };
+}
+
+/**
  * Default configuration
  */
-const defaults: Omit<ResolvedBunboxConfig, "cors"> = {
+const defaults: Omit<ResolvedBunboxConfig, "cors" | "openapi"> = {
   port: 3000,
   hostname: "localhost",
   appDir: join(process.cwd(), "app"),
@@ -138,5 +199,6 @@ export async function resolveConfig(
       cliConfig.publicDir ?? fileConfig.publicDir ?? defaults.publicDir,
     development,
     cors: resolveCorsConfig(cliConfig.cors ?? fileConfig.cors),
+    openapi: resolveOpenAPIConfig(cliConfig.openapi ?? fileConfig.openapi),
   };
 }

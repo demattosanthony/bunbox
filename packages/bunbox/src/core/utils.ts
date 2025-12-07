@@ -81,29 +81,6 @@ function generateAssetHash(filePath: string): string {
 }
 
 /**
- * Get the MIME type for an asset file
- */
-function getAssetMimeType(ext: string): string {
-  const mimeTypes: Record<string, string> = {
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    gif: "image/gif",
-    svg: "image/svg+xml",
-    webp: "image/webp",
-    avif: "image/avif",
-    ico: "image/x-icon",
-    bmp: "image/bmp",
-    woff: "font/woff",
-    woff2: "font/woff2",
-    ttf: "font/ttf",
-    otf: "font/otf",
-    eot: "application/vnd.ms-fontobject",
-  };
-  return mimeTypes[ext.toLowerCase()] || "application/octet-stream";
-}
-
-/**
  * Create a plugin to handle asset imports (images, fonts, etc.)
  */
 function createAssetLoaderPlugin(): BunPlugin {

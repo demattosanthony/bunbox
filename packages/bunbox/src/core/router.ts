@@ -113,10 +113,23 @@ export function routePathToUrl(filePath: string): string {
 }
 
 /**
+ * Safely parse request URL, handling both absolute and relative URLs.
+ * In production behind reverse proxies, req.url may be just "/" instead of full URL.
+ */
+export function getRequestUrl(req: Request): URL {
+  if (req.url.includes("://")) {
+    return new URL(req.url);
+  }
+  const host = req.headers.get("host") || "localhost";
+  const protocol = req.headers.get("x-forwarded-proto") || "http";
+  return new URL(req.url, `${protocol}://${host}`);
+}
+
+/**
  * Match a URL path against a route
  */
-export function matchRoute(url: string, route: Route): RouteMatch | null {
-  const urlObj = new URL(url);
+export function matchRoute(req: Request, route: Route): RouteMatch | null {
+  const urlObj = getRequestUrl(req);
   const path = urlObj.pathname;
 
   const match = path.match(route.pattern);

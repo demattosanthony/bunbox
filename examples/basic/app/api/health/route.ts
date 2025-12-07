@@ -5,7 +5,7 @@
 
 import { route } from "@ademattos/bunbox";
 
-export const GET = route.handle(() => ({
+export const healthCheck = route.get().handle(() => ({
   status: "healthy",
   timestamp: new Date().toISOString(),
   uptime: process.uptime(),

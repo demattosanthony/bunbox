@@ -24,7 +24,7 @@ export type UseStreamResult<TResponse> = {
   abort: () => void;
 };
 
-type ApiMethodFunction = (opts?: any) => Promise<AsyncIterable<any>>;
+type ApiMethodFunction = (opts?: any) => Promise<AsyncIterable<any> | any>;
 
 export function useStream<TResponse, TParams = any, TQuery = any, TBody = any>(
   apiMethod: ApiMethodFunction,

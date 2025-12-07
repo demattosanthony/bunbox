@@ -2,34 +2,34 @@
  * Example API route that triggers a job
  * POST /api/notify - triggers the send-notification job
  */
-import { jobs, json, error } from "@ademattos/bunbox";
-import type { BunboxRequest } from "@ademattos/bunbox";
+import { route, jobs, json, errors } from "@ademattos/bunbox";
+import { z } from "zod";
 
-export async function POST(req: BunboxRequest) {
-  const body = req.body as { userId?: string; message?: string } | null;
+const NotifySchema = z.object({
+  userId: z.string().min(1),
+  message: z.string().min(1),
+});
 
-  if (!body?.userId || !body?.message) {
-    return error("userId and message are required", 400);
-  }
+export const triggerNotification = route
+  .post()
+  .body(NotifySchema)
+  .handle(({ body }) => {
+    // Fire and forget - doesn't block the response
+    jobs.trigger("send-notification", {
+      userId: body.userId,
+      message: body.message,
+    });
 
-  // Fire and forget - doesn't block the response
-  jobs.trigger("send-notification", {
-    userId: body.userId,
-    message: body.message,
+    return {
+      success: true,
+      message: "Notification job triggered",
+    };
   });
 
-  return json({
-    success: true,
-    message: "Notification job triggered",
-  });
-}
-
-export async function GET() {
-  return json({
-    usage: "POST /api/notify with { userId, message }",
-    example: {
-      userId: "user-123",
-      message: "Hello from Bunbox jobs!",
-    },
-  });
-}
+export const getNotifyUsage = route.get().handle(() => ({
+  usage: "POST /api/notify with { userId, message }",
+  example: {
+    userId: "user-123",
+    message: "Hello from Bunbox jobs!",
+  },
+}));

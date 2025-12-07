@@ -23,6 +23,7 @@ export type {
   BunboxConfig,
   ResolvedBunboxConfig,
   CorsConfig,
+  OpenAPIConfig,
 } from "./core/config";
 
 export {
@@ -55,9 +56,31 @@ export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";
 
 export { json, error, route, stream, sse, defineMiddleware } from "./core/route";
+export type { HttpMethod, BeforeHook, AfterHook, RouteMeta } from "./core/route";
+
+export {
+  ApiError,
+  ValidationError,
+  errors,
+  problemResponse,
+} from "./core/errors";
+export type {
+  ProblemDetails,
+  ValidationProblemDetails,
+  FieldError,
+} from "./core/errors";
 
 export { useStream } from "./client/useStream";
 export type { UseStreamOptions, UseStreamResult } from "./client/useStream";
 
 export { ClientIsland, registerIsland } from "./client/island";
 export type { ClientIslandProps } from "./client/island";
+
+// OpenAPI generation utilities
+export {
+  generateOpenAPISpec,
+  writeOpenAPISpec,
+  zodToJsonSchema,
+  isZodSchema,
+} from "./core/openapi";
+export type { OpenAPISpec, JSONSchema } from "./core/openapi";

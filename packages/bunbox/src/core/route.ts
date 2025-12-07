@@ -15,6 +15,17 @@ import type {
   StreamingResponse,
   SSEResponse,
 } from "./types";
+import {
+  ValidationError,
+  ApiError,
+  problemResponse,
+  type FieldError,
+} from "./errors";
+
+/**
+ * HTTP methods supported by route handlers
+ */
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
 
 /**
  * Helper to create JSON responses with optional init object
@@ -111,14 +122,18 @@ export function sse<T>(
   ) as SSEResponse<T>;
 }
 
-class ValidationError extends Error {
-  constructor(field: string, details: unknown) {
-    super(
-      `Invalid ${field}${
-        details instanceof Error ? `: ${details.message}` : ""
-      }`
-    );
-  }
+/**
+ * Check if an error is a Zod-like validation error
+ */
+function isZodError(
+  error: unknown
+): error is { issues: Array<{ path: (string | number)[]; code: string; message: string; expected?: string; received?: string }> } {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "issues" in error &&
+    Array.isArray((error as { issues: unknown }).issues)
+  );
 }
 
 /**
@@ -140,12 +155,23 @@ export function defineMiddleware<Extra extends RouteExtras | void = void>(
   return fn;
 }
 
+/**
+ * Route handler with attached type metadata and HTTP method
+ * Used by the client generator to extract types
+ */
 type HandlerWithTypes<TParams, TQuery, TBody, TResponse> = RouteHandler & {
   __types: {
     params: TParams;
     query: TQuery;
     body: TBody;
     response: TResponse;
+  };
+  __method: HttpMethod;
+  __meta?: RouteMeta;
+  __schemas?: {
+    params?: Validator<unknown>;
+    query?: Validator<unknown>;
+    body?: Validator<unknown>;
   };
 };
 
@@ -158,11 +184,50 @@ type RuntimeContext = RouteContext<
 
 type RuntimeMiddleware = Middleware<RuntimeContext, RouteExtras | void>;
 
+/**
+ * Hook function executed before the handler
+ * Can short-circuit by returning a Response
+ */
+export type BeforeHook<TCtx extends RouteExtras = EmptyExtras> = (
+  ctx: RouteContext<RouteParams, RouteQuery, unknown, TCtx>
+) => void | Response | Promise<void | Response>;
+
+/**
+ * Hook function executed after the handler
+ * Can transform the response
+ */
+export type AfterHook<TCtx extends RouteExtras = EmptyExtras> = (
+  ctx: RouteContext<RouteParams, RouteQuery, unknown, TCtx>,
+  response: Response
+) => Response | Promise<Response>;
+
+/**
+ * Route metadata for OpenAPI documentation
+ */
+export interface RouteMeta {
+  /** Short summary of the operation */
+  summary?: string;
+  /** Longer description of the operation */
+  description?: string;
+  /** Tags for grouping operations */
+  tags?: string[];
+  /** Unique operation identifier */
+  operationId?: string;
+  /** Mark operation as deprecated */
+  deprecated?: boolean;
+  /** Response descriptions by status code */
+  responses?: Record<number, { description: string }>;
+}
+
 interface BuilderInternals<TParams, TQuery, TBody> {
+  readonly method?: HttpMethod;
   readonly middlewares: ReadonlyArray<RuntimeMiddleware>;
+  readonly beforeHooks: ReadonlyArray<BeforeHook>;
+  readonly afterHooks: ReadonlyArray<AfterHook>;
   readonly params?: Validator<TParams>;
   readonly query?: Validator<TQuery>;
   readonly body?: Validator<TBody>;
+  readonly meta?: RouteMeta;
 }
 
 function runValidator<T>(
@@ -174,7 +239,26 @@ function runValidator<T>(
   try {
     return schema.parse(value);
   } catch (error) {
-    throw new ValidationError(field, error);
+    // Extract field-level errors from Zod-like validation errors
+    if (isZodError(error)) {
+      const fieldErrors: FieldError[] = error.issues.map((issue) => ({
+        field: `${field}${issue.path.length > 0 ? "." + issue.path.join(".") : ""}`,
+        code: issue.code,
+        message: issue.message,
+        expected: issue.expected,
+        received: issue.received,
+      }));
+      throw new ValidationError(fieldErrors);
+    }
+
+    // Fallback for non-Zod validation errors
+    throw new ValidationError([
+      {
+        field,
+        code: "invalid",
+        message: error instanceof Error ? error.message : "Validation failed",
+      },
+    ]);
   }
 }
 
@@ -192,8 +276,86 @@ class RouteBuilder<
   constructor(
     private readonly internals: BuilderInternals<TParams, TQuery, TBody> = {
       middlewares: [],
+      beforeHooks: [],
+      afterHooks: [],
     }
   ) {}
+
+  /**
+   * Create a GET route handler
+   */
+  get(): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      method: "GET",
+    });
+  }
+
+  /**
+   * Create a POST route handler
+   */
+  post(): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      method: "POST",
+    });
+  }
+
+  /**
+   * Create a PUT route handler
+   */
+  put(): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      method: "PUT",
+    });
+  }
+
+  /**
+   * Create a DELETE route handler
+   */
+  delete(): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Create a PATCH route handler
+   */
+  patch(): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      method: "PATCH",
+    });
+  }
+
+  /**
+   * Add a before hook that runs before middleware and validation
+   * Can short-circuit by returning a Response
+   */
+  before(
+    hook: BeforeHook<TCtx>
+  ): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      beforeHooks: [...this.internals.beforeHooks, hook as BeforeHook],
+    });
+  }
+
+  /**
+   * Add an after hook that runs after the handler
+   * Can transform the response
+   */
+  after(
+    hook: AfterHook<TCtx>
+  ): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      afterHooks: [...this.internals.afterHooks, hook as AfterHook],
+    });
+  }
 
   use<Extra extends RouteExtras | void = void>(
     middleware: Middleware<RouteContext<TParams, TQuery, TBody, TCtx>, Extra>
@@ -232,13 +394,52 @@ class RouteBuilder<
     });
   }
 
+  /**
+   * Add OpenAPI metadata to the route
+   */
+  meta(metadata: RouteMeta): RouteBuilder<TParams, TQuery, TBody, TCtx> {
+    return new RouteBuilder<TParams, TQuery, TBody, TCtx>({
+      ...this.internals,
+      meta: { ...this.internals.meta, ...metadata },
+    });
+  }
+
   handle<TResult>(
     handler: (
       ctx: RouteContext<TParams, TQuery, TBody, TCtx>
     ) => TResult | Response | Promise<TResult | Response>
   ): HandlerWithTypes<TParams, TQuery, TBody, Awaited<TResult>> {
+    // Require HTTP method to be specified
+    if (!this.internals.method) {
+      throw new Error(
+        "HTTP method must be specified. Use route.get(), route.post(), etc. before .handle()"
+      );
+    }
+
+    const method = this.internals.method;
+    const beforeHooks = this.internals.beforeHooks;
+    const afterHooks = this.internals.afterHooks;
+
     const routeHandler: RouteHandler = async (req: BunboxRequest) => {
       try {
+        // Build initial context for before hooks (pre-validation)
+        let ctx: RouteContext<TParams, TQuery, TBody, TCtx> = {
+          ...req,
+          params: req.params as TParams,
+          query: req.query as TQuery,
+          body: req.body as TBody,
+          json: <T>(data: T, init?: number | ResponseInit) => json(data, init),
+        } as RouteContext<TParams, TQuery, TBody, TCtx>;
+
+        // Run before hooks (can short-circuit)
+        for (const hook of beforeHooks) {
+          const result = await hook(ctx as unknown as RouteContext);
+          if (result instanceof Response) {
+            return result;
+          }
+        }
+
+        // Run validation after before hooks
         const params = runValidator(
           this.internals.params,
           req.params,
@@ -247,13 +448,12 @@ class RouteBuilder<
         const query = runValidator(this.internals.query, req.query, "query");
         const body = runValidator(this.internals.body, req.body, "body");
 
-        // Build context by merging validated inputs with request
-        let ctx: RouteContext<TParams, TQuery, TBody, TCtx> = {
-          ...req,
+        // Update context with validated data
+        ctx = {
+          ...ctx,
           params,
           query,
           body,
-          json: <T>(data: T, init?: number | ResponseInit) => json(data, init),
         } as RouteContext<TParams, TQuery, TBody, TCtx>;
 
         // Apply middleware and merge returned context
@@ -276,27 +476,55 @@ class RouteBuilder<
           }
         }
 
+        // Run the handler
         const result = await handler(ctx);
+        let response: Response;
         if (result instanceof Response) {
-          return result;
+          response = result;
+        } else {
+          response = ctx.json(result);
         }
-        return ctx.json(result);
+
+        // Run after hooks (can transform response)
+        for (const hook of afterHooks) {
+          response = await hook(ctx as unknown as RouteContext, response);
+        }
+
+        return response;
       } catch (err) {
-        if (err instanceof ValidationError) {
-          return error(err.message, 400);
+        // Handle structured API errors
+        if (err instanceof ApiError) {
+          return err.toResponse();
         }
+
+        // Handle validation errors with field details
+        if (err instanceof ValidationError) {
+          return err.toResponse();
+        }
+
+        // Generic error handling
         const message = err instanceof Error ? err.message : "Internal error";
         console.error(`Route error: ${message}`);
-        return error(message, 500);
+        return problemResponse(message, 500);
       }
     };
 
-    return routeHandler as HandlerWithTypes<
+    // Attach method metadata to the handler
+    const typedHandler = routeHandler as HandlerWithTypes<
       TParams,
       TQuery,
       TBody,
       Awaited<TResult>
     >;
+    typedHandler.__method = method;
+    typedHandler.__meta = this.internals.meta;
+    typedHandler.__schemas = {
+      params: this.internals.params,
+      query: this.internals.query,
+      body: this.internals.body,
+    };
+
+    return typedHandler;
   }
 }
 

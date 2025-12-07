@@ -10,11 +10,14 @@ const QuerySchema = z.object({
   filter: z.string().default("all"),
 });
 
-export const GET = route.query(QuerySchema).handle(({ query }) => ({
-  message: "Simple route, fully typed",
-  filter: query.filter,
-  timestamp: new Date().toISOString(),
-}));
+export const getExamples = route
+  .get()
+  .query(QuerySchema)
+  .handle(({ query }) => ({
+    message: "Simple route, fully typed",
+    filter: query.filter,
+    timestamp: new Date().toISOString(),
+  }));
 
 // 2) Shared middleware (auth) that augments the context
 const withAuth = route.use(() => {
@@ -34,7 +37,8 @@ const CreateUserSchema = z.object({
   email: z.email(),
 });
 
-export const POST = withAuth
+export const createExample = withAuth
+  .post()
   .body(CreateUserSchema)
   .handle(({ body, user }) => ({
     id: Math.random().toString(36).substring(7),
@@ -48,8 +52,11 @@ const UpdateSchema = z.object({
   content: z.string().min(10),
 });
 
-export const PUT = withAuth.body(UpdateSchema).handle(({ body, user }) => ({
-  success: true,
-  updated: body,
-  editor: user.name,
-}));
+export const updateExample = withAuth
+  .put()
+  .body(UpdateSchema)
+  .handle(({ body, user }) => ({
+    success: true,
+    updated: body,
+    editor: user.name,
+  }));

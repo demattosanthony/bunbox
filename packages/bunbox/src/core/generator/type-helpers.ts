@@ -6,7 +6,11 @@ export const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 
 export interface ApiRouteMethodMeta {
   path: string;
+  /** The module import name (e.g., Route0) */
   importName: string;
+  /** The actual export name in the module (e.g., listUsers) */
+  exportName: string;
+  /** The HTTP method (GET, POST, etc.) */
   method: string;
   typeAlias: string;
 }
@@ -25,12 +29,13 @@ export function generateTypeAliases(node: ApiRouteTreeNode): string[] {
   function traverse(obj: ApiRouteTreeNode) {
     for (const meta of obj.methods) {
       // Extract all types from route.handle chains (params/query/body/response)
+      // Uses the actual export name (e.g., listUsers) not the method name
       // For Response: Try __types first (route.handle), then ReturnType (direct functions)
       lines.push(
-        `type ${meta.typeAlias}_Params = typeof ${meta.importName}.${meta.method} extends { __types: { params: infer T } } ? T : Record<string, unknown>;`,
-        `type ${meta.typeAlias}_Query = typeof ${meta.importName}.${meta.method} extends { __types: { query: infer T } } ? T : Record<string, unknown>;`,
-        `type ${meta.typeAlias}_Body = typeof ${meta.importName}.${meta.method} extends { __types: { body: infer T } } ? T : unknown;`,
-        `type ${meta.typeAlias}_Response = typeof ${meta.importName}.${meta.method} extends { __types: { response: infer T } } ? T : Awaited<ReturnType<typeof ${meta.importName}.${meta.method}>>;`
+        `type ${meta.typeAlias}_Params = typeof ${meta.importName}.${meta.exportName} extends { __types: { params: infer T } } ? T : Record<string, unknown>;`,
+        `type ${meta.typeAlias}_Query = typeof ${meta.importName}.${meta.exportName} extends { __types: { query: infer T } } ? T : Record<string, unknown>;`,
+        `type ${meta.typeAlias}_Body = typeof ${meta.importName}.${meta.exportName} extends { __types: { body: infer T } } ? T : unknown;`,
+        `type ${meta.typeAlias}_Response = typeof ${meta.importName}.${meta.exportName} extends { __types: { response: infer T } } ? T : Awaited<ReturnType<typeof ${meta.importName}.${meta.exportName}>>;`
       );
     }
 

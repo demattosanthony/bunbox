@@ -15,6 +15,7 @@ describe("ssh", () => {
     deployPath: "/var/www/app",
     name: "myapp",
     port: 3000,
+    script: "start",
     keepReleases: 5,
     exclude: [],
     ...overrides,

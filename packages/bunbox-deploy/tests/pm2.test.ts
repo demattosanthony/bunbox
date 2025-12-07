@@ -15,6 +15,7 @@ describe("pm2", () => {
     deployPath: "/var/www/app",
     name: "myapp",
     port: 3000,
+    script: "start",
     keepReleases: 5,
     exclude: [],
     ...overrides,
@@ -36,12 +37,19 @@ describe("pm2", () => {
       expect(config).toContain('name: "my-custom-app"');
     });
 
-    test("includes bunbox start script", () => {
+    test("uses bun run with configured script", () => {
       const target = createTarget();
       const config = generateEcosystemConfig(target);
 
-      expect(config).toContain('script: "bunbox"');
-      expect(config).toContain('args: "start"');
+      expect(config).toContain('script: "bun"');
+      expect(config).toContain('args: "run start"');
+    });
+
+    test("allows custom script name", () => {
+      const target = createTarget({ script: "dev" });
+      const config = generateEcosystemConfig(target);
+
+      expect(config).toContain('args: "run dev"');
     });
 
     test("sets cwd to current symlink", () => {
@@ -49,13 +57,6 @@ describe("pm2", () => {
       const config = generateEcosystemConfig(target);
 
       expect(config).toContain('cwd: "/var/www/myapp/current"');
-    });
-
-    test("uses bun as interpreter", () => {
-      const target = createTarget();
-      const config = generateEcosystemConfig(target);
-
-      expect(config).toContain('interpreter: "bun"');
     });
 
     test("includes PORT environment variable", () => {

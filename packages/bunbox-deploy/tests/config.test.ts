@@ -226,15 +226,21 @@ describe("config", () => {
       expect(target.port).toBe(3000);
     });
 
+    test("applies default script", () => {
+      const { target } = resolveTarget(baseConfig, "production");
+      expect(target.script).toBe("start");
+    });
+
     test("applies default keepReleases", () => {
       const { target } = resolveTarget(baseConfig, "production");
       expect(target.keepReleases).toBe(5);
     });
 
-    test("applies default exclude patterns", () => {
+    test("applies empty default exclude patterns (defaults are in transfer.ts)", () => {
       const { target } = resolveTarget(baseConfig, "production");
-      expect(target.exclude).toContain("node_modules");
-      expect(target.exclude).toContain(".git");
+      // Default excludes are now handled in transfer.ts, not config.ts
+      // User's exclude list starts empty unless they specify patterns
+      expect(target.exclude).toEqual([]);
     });
 
     test("preserves custom values over defaults", () => {
@@ -311,6 +317,64 @@ describe("config", () => {
 
       const { target } = resolveTarget(configWithEnv, "production");
       expect(target.env?.MISSING_VAR).toBe("");
+    });
+
+    test("resolves passphrase from SSH_PASSPHRASE env var", () => {
+      const originalPassphrase = process.env.SSH_PASSPHRASE;
+      process.env.SSH_PASSPHRASE = "env-passphrase-123";
+
+      try {
+        const config: DeployConfig = {
+          targets: {
+            production: {
+              host: "example.com",
+              username: "deploy",
+              privateKey: "~/.ssh/id_ed25519",
+              deployPath: "/var/www/app",
+              name: "myapp",
+              // No passphrase in config
+            },
+          },
+        };
+
+        const { target } = resolveTarget(config, "production");
+        expect(target.passphrase).toBe("env-passphrase-123");
+      } finally {
+        if (originalPassphrase === undefined) {
+          delete process.env.SSH_PASSPHRASE;
+        } else {
+          process.env.SSH_PASSPHRASE = originalPassphrase;
+        }
+      }
+    });
+
+    test("config passphrase takes precedence over SSH_PASSPHRASE env var", () => {
+      const originalPassphrase = process.env.SSH_PASSPHRASE;
+      process.env.SSH_PASSPHRASE = "env-passphrase";
+
+      try {
+        const config: DeployConfig = {
+          targets: {
+            production: {
+              host: "example.com",
+              username: "deploy",
+              privateKey: "~/.ssh/id_ed25519",
+              deployPath: "/var/www/app",
+              name: "myapp",
+              passphrase: "config-passphrase",
+            },
+          },
+        };
+
+        const { target } = resolveTarget(config, "production");
+        expect(target.passphrase).toBe("config-passphrase");
+      } finally {
+        if (originalPassphrase === undefined) {
+          delete process.env.SSH_PASSPHRASE;
+        } else {
+          process.env.SSH_PASSPHRASE = originalPassphrase;
+        }
+      }
     });
   });
 

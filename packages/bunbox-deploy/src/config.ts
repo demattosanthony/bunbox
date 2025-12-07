@@ -6,12 +6,27 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
 
+export interface GitConfig {
+  repo: string;
+  branch?: string;
+  deployKey?: string;
+  token?: string;
+}
+
+export interface ResolvedGitConfig {
+  repo: string;
+  branch: string;
+  deployKey?: string;
+  token?: string;
+}
+
 export interface DeployTarget {
   // SSH connection
   host: string;
   sshPort?: number;
   username: string;
   privateKey: string;
+  passphrase?: string;
 
   // Remote paths
   deployPath: string;
@@ -21,12 +36,18 @@ export interface DeployTarget {
   port?: number;
   env?: Record<string, string>;
 
+  // npm/bun script to run (default: "start")
+  script?: string;
+
   // Domain for Caddy (optional)
   domain?: string;
 
   // Deployment options
   keepReleases?: number;
   exclude?: string[];
+
+  // Git deployment (optional - if set, uses git instead of rsync)
+  git?: GitConfig;
 }
 
 export interface DeployConfig {
@@ -37,8 +58,10 @@ export interface DeployConfig {
 export interface ResolvedTarget extends DeployTarget {
   sshPort: number;
   port: number;
+  script: string;
   keepReleases: number;
   exclude: string[];
+  git?: ResolvedGitConfig;
 }
 
 /**
@@ -130,6 +153,35 @@ function validateTarget(name: string, target: unknown): void {
       );
     }
   }
+
+  // Validate git config if present
+  if (t.git) {
+    validateGitConfig(name, t.git);
+  }
+}
+
+function validateGitConfig(targetName: string, git: unknown): void {
+  if (typeof git !== "object" || !git) {
+    throw new Error(`Invalid target '${targetName}': git config must be an object`);
+  }
+
+  const g = git as Record<string, unknown>;
+
+  if (!g.repo || typeof g.repo !== "string") {
+    throw new Error(`Invalid target '${targetName}': git.repo is required`);
+  }
+
+  if (g.branch !== undefined && typeof g.branch !== "string") {
+    throw new Error(`Invalid target '${targetName}': git.branch must be a string`);
+  }
+
+  if (g.deployKey !== undefined && typeof g.deployKey !== "string") {
+    throw new Error(`Invalid target '${targetName}': git.deployKey must be a string`);
+  }
+
+  if (g.token !== undefined && typeof g.token !== "string") {
+    throw new Error(`Invalid target '${targetName}': git.token must be a string`);
+  }
 }
 
 /**
@@ -154,22 +206,46 @@ export function resolveTarget(
   }
 
   // Apply defaults
+  // Note: Default excludes (node_modules, .git, etc.) are handled in transfer.ts
+  // The user's exclude list is for additional patterns beyond the defaults
+  // Destructure to exclude git (will be resolved separately)
+  const { git: _git, ...targetWithoutGit } = target;
+
   const resolved: ResolvedTarget = {
-    ...target,
+    ...targetWithoutGit,
     sshPort: target.sshPort ?? 22,
     port: target.port ?? 3000,
+    script: target.script ?? "start",
     keepReleases: target.keepReleases ?? 5,
-    exclude: target.exclude ?? [
-      "node_modules",
-      ".git",
-      ".env.local",
-      ".env.development",
-      "*.log",
-    ],
+    exclude: target.exclude ?? [],
   };
+
+  // Resolve git config if present
+  if (target.git) {
+    let resolvedToken = target.git.token;
+
+    // Resolve token from environment variable placeholders
+    if (resolvedToken) {
+      resolvedToken = resolvedToken.replace(/\$\{(\w+)\}/g, (_, varName) => {
+        return process.env[varName] || "";
+      });
+    }
+
+    resolved.git = {
+      repo: target.git.repo,
+      branch: target.git.branch ?? "main",
+      deployKey: target.git.deployKey?.replace("~", homedir()),
+      token: resolvedToken,
+    };
+  }
 
   // Resolve privateKey path
   resolved.privateKey = resolved.privateKey.replace("~", homedir());
+
+  // Check for SSH_PASSPHRASE environment variable if not set
+  if (!resolved.passphrase && process.env.SSH_PASSPHRASE) {
+    resolved.passphrase = process.env.SSH_PASSPHRASE;
+  }
 
   // Resolve environment variable placeholders in env
   if (resolved.env) {
@@ -232,6 +308,15 @@ export default defineDeployConfig({
 
       // Number of releases to keep for rollback (default: 5)
       keepReleases: 5,
+
+      // Git deployment (optional - uses git clone instead of rsync)
+      // git: {
+      //   repo: "https://github.com/user/myapp.git",
+      //   branch: "main",
+      //   // For private repos, use deploy key or token:
+      //   // deployKey: "~/.ssh/deploy_key",
+      //   // token: "\${GITHUB_TOKEN}",
+      // },
     },
 
     // Add more targets as needed:

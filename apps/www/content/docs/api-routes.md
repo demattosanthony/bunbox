@@ -13,7 +13,7 @@ Create a `route.ts` file in the `app/api/` directory:
 // app/api/hello/route.ts
 import { route } from "@ademattos/bunbox";
 
-export const GET = route.handle(async (ctx) => {
+export const hello = route.get().handle(async (ctx) => {
   return { message: "Hello, World!" };
 });
 ```
@@ -22,32 +22,34 @@ This creates a GET endpoint at `/api/hello`.
 
 ## HTTP Methods
 
-Support different HTTP methods by exporting handlers:
+Use method builders for different HTTP methods:
 
 ```typescript
 // app/api/users/route.ts
 import { route } from "@ademattos/bunbox";
 
-export const GET = route.handle(async (ctx) => {
+export const listUsers = route.get().handle(async (ctx) => {
   return { users: [] };
 });
 
-export const POST = route.handle(async (ctx) => {
+export const createUser = route.post().handle(async (ctx) => {
   const user = ctx.body;
   return { user, created: true };
 });
 
-export const DELETE = route.handle(async (ctx) => {
+export const deleteUser = route.delete().handle(async (ctx) => {
   return { deleted: true };
 });
 ```
+
+Available methods: `.get()`, `.post()`, `.put()`, `.patch()`, `.delete()`
 
 ## Request Context
 
 The handler receives a context object with useful properties:
 
 ```typescript
-export const GET = route.handle(async (ctx) => {
+export const getUser = route.get().handle(async (ctx) => {
   // Access request properties
   const { params, query, body, headers, url, method } = ctx;
 
@@ -64,7 +66,7 @@ Use parameters in your API routes:
 // app/api/users/[id]/route.ts
 import { route } from "@ademattos/bunbox";
 
-export const GET = route.handle(async (ctx) => {
+export const getUser = route.get().handle(async (ctx) => {
   const userId = ctx.params.id;
   return { userId, name: "John Doe" };
 });
@@ -72,21 +74,24 @@ export const GET = route.handle(async (ctx) => {
 
 ## Validation
 
-Add validation with Zod or any validator:
+Add validation with Zod schemas:
 
 ```typescript
 import { route } from "@ademattos/bunbox";
 import { z } from "zod";
 
-const userSchema = z.object({
+const UserSchema = z.object({
   name: z.string(),
   email: z.string().email(),
 });
 
-export const POST = route.body(userSchema).handle(async (ctx) => {
-  // ctx.body is now typed and validated
-  return { user: ctx.body };
-});
+export const createUser = route
+  .post()
+  .body(UserSchema)
+  .handle(async (ctx) => {
+    // ctx.body is typed and validated
+    return { user: ctx.body };
+  });
 ```
 
 ## Middleware
@@ -94,20 +99,23 @@ export const POST = route.body(userSchema).handle(async (ctx) => {
 Add middleware to routes:
 
 ```typescript
-import { route } from "@ademattos/bunbox";
+import { route, defineMiddleware } from "@ademattos/bunbox";
 
-const authMiddleware = async (ctx) => {
+const auth = defineMiddleware(async (ctx) => {
   const token = ctx.headers.get("authorization");
   if (!token) {
-    throw new Error("Unauthorized");
+    return new Response("Unauthorized", { status: 401 });
   }
   return { user: { id: "123" } };
-};
-
-export const GET = route.use(authMiddleware).handle(async (ctx) => {
-  // ctx.user is available from middleware
-  return { user: ctx.user };
 });
+
+export const getProfile = route
+  .get()
+  .use(auth)
+  .handle(async (ctx) => {
+    // ctx.user is available from middleware
+    return { user: ctx.user };
+  });
 ```
 
 ## Error Handling
@@ -115,9 +123,11 @@ export const GET = route.use(authMiddleware).handle(async (ctx) => {
 Errors are automatically handled:
 
 ```typescript
-export const GET = route.handle(async (ctx) => {
+import { route, error } from "@ademattos/bunbox";
+
+export const getUser = route.get().handle(async (ctx) => {
   if (!ctx.query.id) {
-    throw new Error("ID is required");
+    return error("ID is required", 400);
   }
   return { id: ctx.query.id };
 });
@@ -128,7 +138,7 @@ export const GET = route.handle(async (ctx) => {
 Set custom response headers:
 
 ```typescript
-export const GET = route.handle(async (ctx) => {
+export const download = route.get().handle(async (ctx) => {
   return new Response(JSON.stringify({ data: "hello" }), {
     headers: {
       "Content-Type": "application/json",
@@ -137,5 +147,25 @@ export const GET = route.handle(async (ctx) => {
   });
 });
 ```
+
+## OpenAPI Documentation
+
+Add metadata for auto-generated API docs:
+
+```typescript
+export const createUser = route
+  .post()
+  .meta({
+    summary: "Create a new user",
+    description: "Creates a user account",
+    tags: ["users"],
+  })
+  .body(UserSchema)
+  .handle(async (ctx) => {
+    return { user: ctx.body };
+  });
+```
+
+See [OpenAPI & Swagger](/docs/openapi) for full documentation.
 
 For streaming responses and Server-Sent Events, see the [Streaming](/docs/streaming) guide.

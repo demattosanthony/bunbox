@@ -5,7 +5,8 @@
 import type { ResolvedTarget } from "./config";
 import { SSHClient } from "./ssh";
 import { buildLocally, transferFiles, checkRsync } from "./transfer";
-import { setupPM2, startOrReload, isPM2Installed, installPM2 } from "./pm2";
+import { isGitInstalled, setupDeployKey, gitSync } from "./git";
+import { setupPM2, startOrReload, isPM2Installed } from "./pm2";
 import {
   configureCaddy,
   isCaddyInstalled,
@@ -60,8 +61,10 @@ export async function deploy(
     console.log();
   }
 
-  // Check rsync is available
-  if (!(await checkRsync())) {
+  const useGit = !!target.git;
+
+  // Check rsync is available (only needed for non-git deployments)
+  if (!useGit && !(await checkRsync())) {
     throw new Error("rsync is not installed. Please install rsync to continue.");
   }
 
@@ -69,10 +72,19 @@ export async function deploy(
 
   try {
     // 1. Connect to server
-    spinner.start("Connecting to server...");
     if (!dryRun) {
       ssh = new SSHClient(target);
+
+      // Check if we need passphrase before starting spinner
+      // This ensures clean prompt without spinner interference
+      if (ssh.needsPassphrasePrompt()) {
+        await ssh.promptForPassphrase();
+      }
+
+      spinner.start("Connecting to server...");
       await ssh.connect();
+    } else {
+      spinner.start("Connecting to server...");
     }
     spinner.succeed(`Connected to ${target.host}`);
 
@@ -83,8 +95,8 @@ export async function deploy(
     }
     spinner.succeed("Pre-flight checks passed");
 
-    // 3. Build locally
-    if (build) {
+    // 3. Build locally (skip when using git - source comes from repo)
+    if (build && !useGit) {
       spinner.start("Building application...");
       if (!dryRun) {
         await buildLocally(verbose);
@@ -101,12 +113,29 @@ export async function deploy(
     }
     spinner.succeed("Release directory ready");
 
-    // 5. Transfer files
-    spinner.start("Transferring files...");
-    if (!dryRun) {
-      await transferFiles(target, releaseDir, verbose);
+    // 5. Transfer files (git clone OR rsync)
+    if (useGit && ssh) {
+      // Git-based deployment
+      spinner.start("Cloning repository...");
+      if (!dryRun) {
+        // Setup deploy key if needed (first deploy only)
+        if (target.git!.deployKey) {
+          const keyExists = await ssh.pathExists(`${target.deployPath}/.ssh/deploy_key`);
+          if (!keyExists) {
+            await setupDeployKey(ssh, target.git!.deployKey, target.deployPath);
+          }
+        }
+        await gitSync(ssh, target, releaseDir);
+      }
+      spinner.succeed(`Cloned ${target.git!.branch} branch`);
+    } else {
+      // Rsync-based deployment
+      spinner.start("Transferring files...");
+      if (!dryRun) {
+        await transferFiles(target, releaseDir, verbose);
+      }
+      spinner.succeed("Files transferred");
     }
-    spinner.succeed("Files transferred");
 
     // 6. Install dependencies on server
     if (install && ssh) {
@@ -161,7 +190,22 @@ export async function deploy(
       await new Promise((r) => setTimeout(r, 2000)); // Wait for startup
       const healthy = await healthCheck(ssh, target);
       if (!healthy) {
-        spinner.warn("Health check failed - app may still be starting");
+        // Check PM2 logs for diagnostic info
+        const logResult = await ssh.exec(
+          `pm2 logs ${target.name} --nostream --lines 15 2>&1`
+        );
+        const logs = logResult.stdout || "";
+
+        // Check for common issues
+        if (logs.includes("0 routes") || logs.includes("(0 routes)")) {
+          spinner.fail(
+            "Health check failed - app started with 0 routes. Check that source files were transferred correctly."
+          );
+        } else if (logs.includes("Error") || logs.includes("error")) {
+          spinner.fail("Health check failed - check PM2 logs for errors");
+        } else {
+          spinner.warn("Health check failed - app may still be starting");
+        }
       } else {
         spinner.succeed("Health check passed");
       }
@@ -231,20 +275,43 @@ async function preflightChecks(
       spinner.warn("Caddy not installed - skipping HTTPS setup");
     }
   }
+
+  // Check git is installed if using git deployment
+  if (target.git) {
+    const hasGit = await isGitInstalled(ssh);
+    if (!hasGit) {
+      throw new Error(
+        "Git is not installed on the server. Install git or use rsync deployment."
+      );
+    }
+  }
 }
 
 /**
  * Check if the application is healthy
+ * Returns true only if the app responds with a non-404 status code
  */
 async function healthCheck(
   ssh: SSHClient,
   target: ResolvedTarget
 ): Promise<boolean> {
   try {
+    // First try /api/health endpoint, then fall back to /
+    // Use -w to get HTTP status code
     const result = await ssh.exec(
-      `curl -sf http://localhost:${target.port}/api/health || curl -sf http://localhost:${target.port}/`
+      `curl -sf -o /dev/null -w '%{http_code}' http://localhost:${target.port}/api/health 2>/dev/null || ` +
+        `curl -sf -o /dev/null -w '%{http_code}' http://localhost:${target.port}/ 2>/dev/null`
     );
-    return result.code === 0;
+
+    if (result.code !== 0) {
+      return false;
+    }
+
+    // Parse the HTTP status code
+    const statusCode = parseInt(result.stdout.trim(), 10);
+
+    // Consider 2xx and 3xx as healthy, 404 and other 4xx/5xx as unhealthy
+    return statusCode >= 200 && statusCode < 400;
   } catch {
     return false;
   }

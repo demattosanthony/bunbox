@@ -17,19 +17,22 @@ const QuerySchema = z.object({
   role: z.enum(["admin", "user"]).optional(),
 });
 
-export const GET = route.query(QuerySchema).handle(({ query }) => {
-  let filteredUsers = users;
+export const listUsers = route
+  .get()
+  .query(QuerySchema)
+  .handle(({ query }) => {
+    let filteredUsers = users;
 
-  if (query.role) {
-    filteredUsers = users.filter((u) => u.role === query.role);
-  }
+    if (query.role) {
+      filteredUsers = users.filter((u) => u.role === query.role);
+    }
 
-  return {
-    users: filteredUsers,
-    total: filteredUsers.length,
-    timestamp: new Date().toISOString(),
-  };
-});
+    return {
+      users: filteredUsers,
+      total: filteredUsers.length,
+      timestamp: new Date().toISOString(),
+    };
+  });
 
 // POST /api/users - Create a new user
 const CreateUserSchema = z.object({
@@ -38,16 +41,19 @@ const CreateUserSchema = z.object({
   role: z.enum(["admin", "user"]).default("user"),
 });
 
-export const POST = route.body(CreateUserSchema).handle(({ body }) => {
-  const newUser = {
-    id: String(users.length + 1),
-    ...body,
-  };
+export const createUser = route
+  .post()
+  .body(CreateUserSchema)
+  .handle(({ body }) => {
+    const newUser = {
+      id: String(users.length + 1),
+      ...body,
+    };
 
-  users.push(newUser);
+    users.push(newUser);
 
-  return {
-    user: newUser,
-    message: "User created successfully",
-  };
-});
+    return {
+      user: newUser,
+      message: "User created successfully",
+    };
+  });

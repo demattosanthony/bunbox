@@ -72,15 +72,36 @@ describe("route builder", () => {
     },
   };
 
+  test("requires HTTP method before handle()", () => {
+    expect(() => route.handle(() => ({ hello: "world" }))).toThrow(
+      "HTTP method must be specified"
+    );
+  });
+
   test("serializes plain object results", async () => {
-    const handler = route.handle(() => ({ hello: "world" }));
+    const handler = route.get().handle(() => ({ hello: "world" }));
+    expect(handler.__method).toBe("GET");
     const response = await handler(createRequest());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ hello: "world" });
   });
 
+  test("supports all HTTP methods", () => {
+    const getHandler = route.get().handle(() => ({}));
+    const postHandler = route.post().handle(() => ({}));
+    const putHandler = route.put().handle(() => ({}));
+    const deleteHandler = route.delete().handle(() => ({}));
+    const patchHandler = route.patch().handle(() => ({}));
+
+    expect(getHandler.__method).toBe("GET");
+    expect(postHandler.__method).toBe("POST");
+    expect(putHandler.__method).toBe("PUT");
+    expect(deleteHandler.__method).toBe("DELETE");
+    expect(patchHandler.__method).toBe("PATCH");
+  });
+
   test("supports returning custom Response", async () => {
-    const handler = route.handle(() => new Response("ok", { status: 201 }));
+    const handler = route.get().handle(() => new Response("ok", { status: 201 }));
     const response = await handler(createRequest());
     expect(response.status).toBe(201);
     expect(await response.text()).toBe("ok");
@@ -88,6 +109,7 @@ describe("route builder", () => {
 
   test("validates params, query, and body", async () => {
     const handler = route
+      .post()
       .params(paramsSchema)
       .query(querySchema)
       .body(nameSchema)
@@ -114,6 +136,7 @@ describe("route builder", () => {
 
   test("merges middleware-returned context", async () => {
     const handler = route
+      .get()
       .use(() => ({ user: { id: "42" } }))
       .use((ctx) => ({ audit: `user:${ctx.user.id}` }))
       .handle(({ user, audit }) => ({ userId: user.id, audit }));
@@ -125,6 +148,7 @@ describe("route builder", () => {
   test("tolerates middleware side effects without return value", async () => {
     let invoked = false;
     const handler = route
+      .get()
       .use(() => {
         invoked = true;
       })
@@ -136,7 +160,7 @@ describe("route builder", () => {
   });
 
   test("exposes ctx.json helper", async () => {
-    const handler = route.handle((ctx) => ctx.json({ ok: true }, 202));
+    const handler = route.get().handle((ctx) => ctx.json({ ok: true }, 202));
     const response = await handler(createRequest());
     expect(response.status).toBe(202);
     expect(await response.json()).toEqual({ ok: true });
@@ -155,7 +179,7 @@ describe("route builder", () => {
       },
     }) as BunboxRequest;
 
-    const handler = route.handle(({ params, query, body }) => ({
+    const handler = route.get().handle(({ params, query, body }) => ({
       params,
       query,
       body,
@@ -174,6 +198,7 @@ describe("route builder", () => {
 describe("middleware early exit", () => {
   test("middleware can return Response to short-circuit", async () => {
     const handler = route
+      .get()
       .use(() => new Response("blocked", { status: 403 }))
       .handle(() => ({ never: "reached" }));
 
@@ -184,6 +209,7 @@ describe("middleware early exit", () => {
 
   test("middleware can return error() for early exit", async () => {
     const handler = route
+      .get()
       .use(() => error("Unauthorized", 401))
       .handle(() => ({ never: "reached" }));
 
@@ -194,6 +220,7 @@ describe("middleware early exit", () => {
 
   test("handler runs when middleware returns context", async () => {
     const handler = route
+      .get()
       .use(() => ({ authorized: true }))
       .handle((ctx) => ({ authorized: ctx.authorized }));
 
@@ -205,6 +232,7 @@ describe("middleware early exit", () => {
   test("first middleware returning Response stops chain", async () => {
     let secondCalled = false;
     const handler = route
+      .get()
       .use(() => error("stopped", 400))
       .use(() => {
         secondCalled = true;
@@ -238,7 +266,7 @@ describe("middleware early exit", () => {
       return { token };
     });
 
-    const handler = route.use(auth).handle((ctx) => ({ token: ctx.token }));
+    const handler = route.get().use(auth).handle((ctx) => ({ token: ctx.token }));
 
     const response = await handler(bunboxReq);
     expect(response.status).toBe(200);
@@ -263,7 +291,7 @@ describe("middleware early exit", () => {
       return { token };
     });
 
-    const handler = route.use(auth).handle((ctx) => ({ token: ctx.token }));
+    const handler = route.get().use(auth).handle((ctx) => ({ token: ctx.token }));
 
     const response = await handler(bunboxReq);
     expect(response.status).toBe(401);
@@ -277,7 +305,7 @@ describe("defineMiddleware helper", () => {
       user: { id: "123", name: "Test" },
     }));
 
-    const handler = route.use(addUser).handle((ctx) => ({ user: ctx.user }));
+    const handler = route.get().use(addUser).handle((ctx) => ({ user: ctx.user }));
 
     const response = await handler(createRequest());
     expect(await response.json()).toEqual({
@@ -292,6 +320,7 @@ describe("defineMiddleware helper", () => {
     });
 
     const handler = route
+      .get()
       .use(asyncMiddleware)
       .handle((ctx) => ({ async: ctx.async }));
 
@@ -304,10 +333,137 @@ describe("defineMiddleware helper", () => {
       return new Response("early", { status: 418 });
     });
 
-    const handler = route.use(earlyExit).handle(() => ({ never: "called" }));
+    const handler = route.get().use(earlyExit).handle(() => ({ never: "called" }));
 
     const response = await handler(createRequest());
     expect(response.status).toBe(418);
     expect(await response.text()).toBe("early");
+  });
+});
+
+describe("lifecycle hooks", () => {
+  test("before hook runs before handler", async () => {
+    const order: string[] = [];
+    const handler = route
+      .get()
+      .before(() => {
+        order.push("before");
+      })
+      .handle(() => {
+        order.push("handler");
+        return { ok: true };
+      });
+
+    await handler(createRequest());
+    expect(order).toEqual(["before", "handler"]);
+  });
+
+  test("before hook can short-circuit with Response", async () => {
+    const handler = route
+      .get()
+      .before(() => new Response("blocked", { status: 403 }))
+      .handle(() => ({ never: "reached" }));
+
+    const response = await handler(createRequest());
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe("blocked");
+  });
+
+  test("after hook runs after handler", async () => {
+    const order: string[] = [];
+    const handler = route
+      .get()
+      .after((ctx, response) => {
+        order.push("after");
+        return response;
+      })
+      .handle(() => {
+        order.push("handler");
+        return { ok: true };
+      });
+
+    await handler(createRequest());
+    expect(order).toEqual(["handler", "after"]);
+  });
+
+  test("after hook can transform response", async () => {
+    const handler = route
+      .get()
+      .after((ctx, response) => {
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set("X-Custom", "added");
+        return new Response(response.body, {
+          status: response.status,
+          headers: newHeaders,
+        });
+      })
+      .handle(() => ({ ok: true }));
+
+    const response = await handler(createRequest());
+    expect(response.headers.get("X-Custom")).toBe("added");
+  });
+
+  test("multiple hooks run in order", async () => {
+    const order: string[] = [];
+    const handler = route
+      .get()
+      .before(() => {
+        order.push("before1");
+      })
+      .before(() => {
+        order.push("before2");
+      })
+      .after((ctx, response) => {
+        order.push("after1");
+        return response;
+      })
+      .after((ctx, response) => {
+        order.push("after2");
+        return response;
+      })
+      .handle(() => {
+        order.push("handler");
+        return { ok: true };
+      });
+
+    await handler(createRequest());
+    expect(order).toEqual(["before1", "before2", "handler", "after1", "after2"]);
+  });
+});
+
+describe("structured error responses", () => {
+  test("validation errors return problem+json with field details", async () => {
+    // Schema that throws Zod-like errors
+    const schema = {
+      parse(value: unknown) {
+        const errors = [];
+        const obj = value as Record<string, unknown>;
+        if (typeof obj.email !== "string" || !obj.email.includes("@")) {
+          errors.push({
+            path: ["email"],
+            code: "invalid_string",
+            message: "Invalid email",
+          });
+        }
+        if (errors.length > 0) {
+          throw { issues: errors };
+        }
+        return value;
+      },
+    };
+
+    const handler = route.post().body(schema).handle(() => ({ ok: true }));
+    const response = await handler(
+      createRequest({ body: { email: "invalid" } })
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Content-Type")).toBe("application/problem+json");
+
+    const body = await response.json();
+    expect(body.type).toBe("https://bunbox.dev/errors/validation");
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].field).toBe("body.email");
+    expect(body.errors[0].code).toBe("invalid_string");
   });
 });

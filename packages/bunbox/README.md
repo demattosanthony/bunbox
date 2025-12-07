@@ -184,7 +184,7 @@ See [examples/basic/app/chat](./examples/basic/app/chat) for a complete chat app
 
 **For Next.js users**
 
-You want file-based routing and React SSR, but you don't need all of Next.js. You want something you can read and understand in an afternoon.
+You want file-based routing and React SSR, but you don't need all of Next.js. You want something you can read and understand in an afternoon plus a fast development server.
 
 **For tRPC users**
 
@@ -196,7 +196,7 @@ You want real-time WebSockets with clean abstractions, but you also want type sa
 
 **For everyone**
 
-You want a framework that's small enough to understand completely (~3,000 lines), but powerful enough to build real apps. No magic, no complexity - just files become routes, types flow through automatically.
+You want a framework that's small enough to understand completely, but powerful enough to build real apps. No magic, no complexity - just files become routes, types flow through automatically.
 
 ---
 

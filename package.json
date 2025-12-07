@@ -16,7 +16,8 @@
   ],
   "scripts": {
     "dev": "cd examples/basic && bun run dev",
-    "start": "cd examples/basic && bun run start"
+    "start": "cd examples/basic && bun run start",
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
     "@types/bun": "^1.3.2",

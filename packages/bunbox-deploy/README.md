@@ -8,6 +8,7 @@ Deploy Bunbox apps to VPS servers via SSH with automatic HTTPS setup.
 - **Zero-downtime** - PM2 process management with graceful reloads
 - **Automatic HTTPS** - Caddy integration with Let's Encrypt
 - **Rollback support** - Keep multiple releases for instant rollback
+- **Git or rsync** - Deploy via git clone or rsync file transfer
 - **Simple config** - TypeScript config file with type safety
 
 ## Installation
@@ -136,6 +137,7 @@ interface DeployTarget {
   sshPort?: number; // SSH port (default: 22)
   username: string; // SSH username
   privateKey: string; // Path to SSH private key
+  passphrase?: string; // Passphrase for encrypted key (optional, will prompt if needed)
 
   // Deployment
   deployPath: string; // Where to deploy (e.g., /var/www/myapp)
@@ -143,6 +145,7 @@ interface DeployTarget {
 
   // Application
   port?: number; // App port (default: 3000)
+  script?: string; // npm/bun script to run (default: "start")
   env?: Record<string, string>; // Environment variables
 
   // HTTPS (optional)
@@ -151,7 +154,84 @@ interface DeployTarget {
   // Options
   keepReleases?: number; // Releases to keep (default: 5)
   exclude?: string[]; // Files to exclude from transfer
+
+  // Git deployment (optional - uses git clone instead of rsync)
+  git?: {
+    repo: string; // Repository URL
+    branch?: string; // Branch to deploy (default: "main")
+    deployKey?: string; // Path to deploy key (SSH repos)
+    token?: string; // GitHub token (HTTPS repos, use "${GITHUB_TOKEN}")
+  };
 }
+```
+
+### SSH Key Authentication
+
+bunbox-deploy supports encrypted SSH keys with automatic passphrase handling:
+
+- **Interactive mode** (default): If your SSH key is encrypted, you'll be prompted for the passphrase
+- **Non-interactive mode** (CI/CD): Set passphrase via environment variable or in config
+
+Passphrase resolution order:
+
+1. Explicit `passphrase` in config
+2. `SSH_PASSPHRASE` environment variable
+3. Interactive prompt (if running in a TTY)
+
+```typescript
+// Option 1: Let it prompt (recommended for local development)
+privateKey: "~/.ssh/id_rsa",
+
+// Option 2: SSH_PASSPHRASE environment variable (recommended for CI/CD)
+// Just set SSH_PASSPHRASE=your-passphrase in your environment
+privateKey: "~/.ssh/id_rsa",
+
+// Option 3: Explicit in config
+privateKey: "~/.ssh/id_rsa",
+passphrase: process.env.MY_CUSTOM_VAR,
+
+// Option 4: Hardcoded (not recommended for security reasons)
+privateKey: "~/.ssh/id_rsa",
+passphrase: "your-passphrase",
+```
+
+Example for CI/CD:
+
+```bash
+SSH_PASSPHRASE="your-passphrase" bunx bunbox-deploy deploy production
+```
+
+### Git Deployment
+
+Instead of rsync, you can deploy by cloning from a git repository:
+
+```typescript
+git: {
+  repo: "https://github.com/user/myapp.git",
+  branch: "main",
+}
+```
+
+For private repos, use a deploy key (SSH) or token (HTTPS):
+
+```typescript
+// SSH with deploy key
+git: {
+  repo: "git@github.com:user/myapp.git",
+  deployKey: "~/.ssh/deploy_key",
+}
+
+// HTTPS with token (great for CI/CD)
+git: {
+  repo: "https://github.com/user/myapp.git",
+  token: "${GITHUB_TOKEN}",
+}
+```
+
+Test your git setup before deploying:
+
+```bash
+bunx bunbox-deploy setup-git production
 ```
 
 ## Server Directory Structure

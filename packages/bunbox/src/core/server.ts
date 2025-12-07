@@ -3,8 +3,9 @@
  */
 
 import { join } from "path";
-import type { ResolvedBunboxConfig, ResolvedCorsConfig } from "./config";
-import { matchRoute, sortRoutes, toBunRoutePath } from "./router";
+import type { ResolvedBunboxConfig, ResolvedCorsConfig, ResolvedOpenAPIConfig } from "./config";
+import { createOpenAPIHandler, createSwaggerUIHandler } from "./openapi/runtime";
+import { getRequestUrl, matchRoute, sortRoutes, toBunRoutePath } from "./router";
 import {
   scanPageRoutes,
   scanApiRoutes,
@@ -433,7 +434,7 @@ class BunboxServer {
   private buildAssetsRoute(): RouteHandlers {
     return {
       GET: async (req: Request) => {
-        const url = new URL(req.url);
+        const url = getRequestUrl(req);
         const assetPath = url.pathname.replace("/__bunbox/assets/", "");
         const file = Bun.file(
           join(process.cwd(), ".bunbox", "assets", assetPath)
@@ -582,6 +583,28 @@ class BunboxServer {
   }
 
   /**
+   * Extract API handlers from a route module by scanning for __method property
+   */
+  private extractApiHandlers(
+    module: Record<string, unknown>
+  ): Record<string, RouteHandler> {
+    const handlers: Record<string, RouteHandler> = {};
+
+    for (const [, value] of Object.entries(module)) {
+      if (
+        typeof value === "function" &&
+        "__method" in value &&
+        typeof (value as { __method: unknown }).__method === "string"
+      ) {
+        const method = (value as { __method: string }).__method;
+        handlers[method] = value as unknown as RouteHandler;
+      }
+    }
+
+    return handlers;
+  }
+
+  /**
    * Handle API request with dynamic import in development
    */
   private async handleDynamicApi(
@@ -591,10 +614,13 @@ class BunboxServer {
     method: string
   ): Promise<Response> {
     try {
-      const module = await dynamicImport<ApiRouteModule>(absolutePath, true);
-      const handler = module[method as keyof ApiRouteModule] as
-        | RouteHandler
-        | undefined;
+      const module = await dynamicImport<Record<string, unknown>>(
+        absolutePath,
+        true
+      );
+      const handlers = this.extractApiHandlers(module);
+      const handler = handlers[method];
+
       if (!handler) {
         return new Response("Method not found", { status: 404 });
       }
@@ -647,6 +673,22 @@ class BunboxServer {
       "/__bunbox/assets/:filename": this.buildAssetsRoute(),
     };
 
+    // Add OpenAPI documentation routes if enabled
+    if (this.config.openapi?.enabled) {
+      const basePath = this.config.openapi.path;
+      const specPath = `${basePath}/openapi.json`;
+
+      // Swagger UI endpoint
+      routes[basePath] = {
+        GET: this.wrapWithCors(createSwaggerUIHandler(specPath, this.config.openapi)),
+      };
+
+      // OpenAPI JSON spec endpoint
+      routes[specPath] = {
+        GET: this.wrapWithCors(createOpenAPIHandler(this.config.appDir, this.config.openapi)),
+      };
+    }
+
     const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 
     // Build API routes
@@ -670,19 +712,21 @@ class BunboxServer {
       } else {
         // Production: import once and build handlers for existing methods
         try {
-          const module = await dynamicImport<ApiRouteModule>(
+          const module = await dynamicImport<Record<string, unknown>>(
             absolutePath,
             false
           );
+          const apiHandlers = this.extractApiHandlers(module);
           const handlers: RouteHandlers = {
             // Add OPTIONS handler for CORS preflight
             OPTIONS: this.createOptionsHandler(),
           };
 
           for (const method of HTTP_METHODS) {
-            if (module[method]) {
+            const apiHandler = apiHandlers[method];
+            if (apiHandler) {
               handlers[method] = this.wrapWithCors((req: Request) =>
-                this.handleApiMethod(req, route, module[method]!)
+                this.handleApiMethod(req, route, apiHandler)
               );
             }
           }
@@ -767,7 +811,7 @@ class BunboxServer {
     route: Route,
     handler: RouteHandler
   ): Promise<Response> {
-    const match = matchRoute(req.url, route);
+    const match = matchRoute(req, route);
     if (!match) {
       return new Response("Not Found", { status: 404 });
     }
@@ -799,7 +843,7 @@ class BunboxServer {
     route: Route
   ): Promise<Response> {
     const pagePath = join(this.config.appDir, route.filepath);
-    const match = matchRoute(req.url, route);
+    const match = matchRoute(req, route);
 
     if (!match) {
       return new Response("Not Found", { status: 404 });
@@ -814,7 +858,7 @@ class BunboxServer {
 
       // Find applicable layouts using shared utility
       const layoutModules: LayoutModule[] = [];
-      const urlPath = new URL(req.url).pathname;
+      const urlPath = getRequestUrl(req).pathname;
       const layoutPaths = getApplicableLayoutPaths(urlPath);
 
       for (const path of layoutPaths) {
@@ -863,7 +907,7 @@ class BunboxServer {
     // Fallback handler for client-rendered pages and public files
     routes["/*"] = {
       GET: async (req: Request) => {
-        const url = new URL(req.url);
+        const url = getRequestUrl(req);
 
         // Serve public directory files first
         if (
@@ -958,7 +1002,7 @@ class BunboxServer {
           this.server = server;
         }
 
-        const url = new URL(req.url);
+        const url = getRequestUrl(req);
 
         // Handle HMR WebSocket in development mode
         if (this.config.development && url.pathname === "/__bunbox/hmr") {
@@ -1077,7 +1121,7 @@ class BunboxServer {
     server: Server<WebSocketData>
   ): Promise<Response | undefined> {
     for (const route of this.wsRoutes) {
-      const match = matchRoute(req.url, route);
+      const match = matchRoute(req, route);
       if (!match) continue;
 
       const handler = this.config.development
@@ -1120,7 +1164,7 @@ class BunboxServer {
     server: Server<WebSocketData>
   ): Promise<Response | undefined> {
     for (const route of this.socketRoutes) {
-      const match = matchRoute(req.url, route);
+      const match = matchRoute(req, route);
       if (!match) continue;
 
       const handler = this.config.development
@@ -1134,7 +1178,7 @@ class BunboxServer {
       const topic = getTopicFromRoute(route.filepath);
 
       // Extract user data from URL query parameters
-      const url = new URL(req.url);
+      const url = getRequestUrl(req);
       const userData: Record<string, string> = {};
 
       // Add all query params as user data

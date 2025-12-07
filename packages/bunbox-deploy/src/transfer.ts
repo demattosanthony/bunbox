@@ -33,7 +33,28 @@ export async function buildLocally(verbose?: boolean): Promise<void> {
 }
 
 /**
+ * Default patterns to exclude from transfer
+ * These are always excluded unless explicitly overridden
+ */
+const DEFAULT_EXCLUDES = [
+  "node_modules",
+  ".git",
+  ".env",
+  ".env.*",
+  ".DS_Store",
+  "*.log",
+  ".turbo",
+  ".cache",
+  "coverage",
+  ".nyc_output",
+  ".vscode",
+  ".idea",
+  "*.local",
+];
+
+/**
  * Transfer files to server using rsync
+ * Uses a blacklist approach - transfers everything except excluded patterns
  */
 export async function transferFiles(
   target: ResolvedTarget,
@@ -43,35 +64,22 @@ export async function transferFiles(
   const sshPort = target.sshPort;
   const keyPath = target.privateKey;
 
-  // Files/directories to transfer
-  const includes = [
-    "app/",
-    "public/",
-    ".bunbox/",
-    "package.json",
-    "bun.lock",
-    "bunbox.config.ts",
-    "bunbox.config.js",
-  ];
-
-  // Filter to only existing files
-  const toTransfer = includes.filter((f) => {
-    const path = f.endsWith("/") ? f.slice(0, -1) : f;
-    return existsSync(path);
-  });
-
-  if (toTransfer.length === 0) {
-    throw new Error("No files to transfer. Is this a Bunbox project?");
+  // Verify we have something to transfer (at minimum, package.json should exist)
+  if (!existsSync("package.json")) {
+    throw new Error("No package.json found. Is this a Bunbox project?");
   }
 
-  // Build rsync command
+  // Merge default excludes with user-provided excludes
+  const allExcludes = [...new Set([...DEFAULT_EXCLUDES, ...target.exclude])];
+
+  // Build rsync command - transfer entire directory with excludes
   const rsyncArgs = [
     "-avz", // archive, verbose, compress
     "--delete", // remove files not in source
     "-e",
     `ssh -i ${keyPath} -p ${sshPort} -o StrictHostKeyChecking=accept-new`,
-    ...target.exclude.map((e) => `--exclude=${e}`),
-    ...toTransfer,
+    ...allExcludes.map((e) => `--exclude=${e}`),
+    "./", // Transfer entire current directory
     `${target.username}@${target.host}:${releaseDir}/`,
   ];
 
