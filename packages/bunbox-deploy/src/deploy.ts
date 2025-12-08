@@ -4,7 +4,7 @@
 
 import type { ResolvedTarget } from "./config";
 import { SSHClient } from "./ssh";
-import { buildLocally, transferFiles, checkRsync } from "./transfer";
+import { transferFiles, checkRsync } from "./transfer";
 import { isGitInstalled, setupDeployKey, gitSync } from "./git";
 import { setupPM2, startOrReload, isPM2Installed } from "./pm2";
 import {
@@ -13,7 +13,13 @@ import {
   printDNSInstructions,
   checkPortConflict,
 } from "./caddy";
-import { Spinner, log, printHeader, formatKV, generateReleaseId } from "./utils";
+import {
+  Spinner,
+  log,
+  printHeader,
+  formatKV,
+  generateReleaseId,
+} from "./utils";
 import pc from "picocolors";
 
 export interface DeployOptions {
@@ -65,7 +71,9 @@ export async function deploy(
 
   // Check rsync is available (only needed for non-git deployments)
   if (!useGit && !(await checkRsync())) {
-    throw new Error("rsync is not installed. Please install rsync to continue.");
+    throw new Error(
+      "rsync is not installed. Please install rsync to continue."
+    );
   }
 
   let ssh: SSHClient | null = null;
@@ -95,16 +103,7 @@ export async function deploy(
     }
     spinner.succeed("Pre-flight checks passed");
 
-    // 3. Build locally (skip when using git - source comes from repo)
-    if (build && !useGit) {
-      spinner.start("Building application...");
-      if (!dryRun) {
-        await buildLocally(verbose);
-      }
-      spinner.succeed("Build complete");
-    }
-
-    // 4. Prepare release directory
+    // 3. Prepare release directory
     spinner.start("Preparing release directory...");
     if (ssh) {
       await ssh.exec(`mkdir -p ${releaseDir}`);
@@ -113,14 +112,16 @@ export async function deploy(
     }
     spinner.succeed("Release directory ready");
 
-    // 5. Transfer files (git clone OR rsync)
+    // 4. Transfer files (git clone OR rsync)
     if (useGit && ssh) {
       // Git-based deployment
       spinner.start("Cloning repository...");
       if (!dryRun) {
         // Setup deploy key if needed (first deploy only)
         if (target.git!.deployKey) {
-          const keyExists = await ssh.pathExists(`${target.deployPath}/.ssh/deploy_key`);
+          const keyExists = await ssh.pathExists(
+            `${target.deployPath}/.ssh/deploy_key`
+          );
           if (!keyExists) {
             await setupDeployKey(ssh, target.git!.deployKey, target.deployPath);
           }
@@ -137,18 +138,28 @@ export async function deploy(
       spinner.succeed("Files transferred");
     }
 
-    // 6. Install dependencies on server
+    // 5. Install dependencies on server
     if (install && ssh) {
       spinner.start("Installing dependencies...");
       if (!dryRun) {
-        const result = await ssh.exec(
-          `cd ${releaseDir} && bun install --frozen-lockfile --production`
-        );
+        const result = await ssh.exec(`cd ${releaseDir} && bun install`);
         if (result.code !== 0) {
           throw new Error(`Failed to install dependencies: ${result.stderr}`);
         }
       }
       spinner.succeed("Dependencies installed");
+    }
+
+    // 6. Build on server
+    if (build && ssh) {
+      spinner.start("Building application...");
+      if (!dryRun) {
+        const result = await ssh.exec(`cd ${releaseDir} && bun run build`);
+        if (result.code !== 0) {
+          throw new Error(`Failed to build application: ${result.stderr}`);
+        }
+      }
+      spinner.succeed("Build complete");
     }
 
     // 7. Link shared files (e.g., .env)
@@ -369,7 +380,9 @@ function printDeploySummary(target: ResolvedTarget, releaseId: string): void {
   console.log(pc.dim("  Helpful commands:"));
   console.log(pc.dim(`    bunbox-deploy logs     - View application logs`));
   console.log(pc.dim(`    bunbox-deploy status   - Check deployment status`));
-  console.log(pc.dim(`    bunbox-deploy rollback - Rollback to previous release`));
+  console.log(
+    pc.dim(`    bunbox-deploy rollback - Rollback to previous release`)
+  );
   console.log();
 }
 
@@ -420,7 +433,9 @@ export async function rollback(
     const targetIndex = currentIndex + steps;
     if (targetIndex >= releases.length) {
       throw new Error(
-        `Cannot rollback ${steps} version(s). Only ${releases.length - currentIndex - 1} older release(s) available.`
+        `Cannot rollback ${steps} version(s). Only ${
+          releases.length - currentIndex - 1
+        } older release(s) available.`
       );
     }
 
@@ -469,7 +484,8 @@ export async function status(
 
     // Get current release
     const releaseResult = await ssh.exec(`readlink ${currentLink}`);
-    const currentRelease = releaseResult.stdout.trim().split("/").pop() || "unknown";
+    const currentRelease =
+      releaseResult.stdout.trim().split("/").pop() || "unknown";
     console.log(formatKV("Release", currentRelease));
 
     // Get PM2 status
@@ -497,7 +513,9 @@ export async function status(
       for (const release of releases) {
         const isCurrent = release === currentRelease;
         const prefix = isCurrent ? pc.green("→") : " ";
-        console.log(`    ${prefix} ${release}${isCurrent ? pc.dim(" (current)") : ""}`);
+        console.log(
+          `    ${prefix} ${release}${isCurrent ? pc.dim(" (current)") : ""}`
+        );
       }
     }
 

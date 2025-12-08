@@ -2,7 +2,7 @@ import { ArrowRight } from "lucide-react";
 
 export function FeaturesGrid() {
   return (
-    <div className="py-24 sm:py-32 border-t border-border/40">
+    <div className="py-24 sm:py-32 border-border/40">
       {/* Header */}
       <div className="mx-auto max-w-7xl px-6 lg:px-8 mb-16">
         <h2 className="text-4xl font-bold tracking-tight text-foreground mb-4">
@@ -143,7 +143,8 @@ export function FeaturesGrid() {
               Type-Safe WebSockets
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Define protocols once, get typed events everywhere. Built-in rooms.
+              Define protocols once, get typed events everywhere. Built-in
+              rooms.
             </p>
           </a>
 
@@ -170,8 +171,8 @@ export function FeaturesGrid() {
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
               Stream responses with{" "}
-              <code className="text-xs bg-muted px-1 rounded">useStream()</code>.
-              Perfect for AI.
+              <code className="text-xs bg-muted px-1 rounded">useStream()</code>
+              . Perfect for AI.
             </p>
           </a>
 

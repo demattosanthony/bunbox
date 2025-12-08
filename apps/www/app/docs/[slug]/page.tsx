@@ -35,12 +35,12 @@ export default async function DocsPage({ params }: DocsPageProps) {
   }
 
   return (
-    <article className="py-6">
-      <h1 className="text-4xl font-bold tracking-tight mb-2">
+    <article className="py-6 max-w-3xl">
+      <h1 className="text-3xl font-semibold tracking-tight mb-2">
         {doc.metadata.title}
       </h1>
       {doc.metadata.description && (
-        <p className="text-lg text-muted-foreground mb-8">
+        <p className="text-base text-muted-foreground mb-6">
           {doc.metadata.description}
         </p>
       )}

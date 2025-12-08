@@ -1,4 +1,39 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* Background grid pattern */
+.bg-grid-pattern {
+  background-image: radial-gradient(
+    circle,
+    oklch(0.7 0 0 / 15%) 1px,
+    transparent 1px
+  );
+  background-size: 32px 32px;
+}
+
+.dark .bg-grid-pattern {
+  background-image: radial-gradient(
+    circle,
+    oklch(0.5 0 0 / 20%) 1px,
+    transparent 1px
+  );
+}
+
+/* Fade out grid towards edges */
+.bg-grid-fade {
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 40%, transparent 100%);
+}
+
+/* Terminal cursor blink */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
 
 :root {
   /* Light Mode - shadcn default oklch */

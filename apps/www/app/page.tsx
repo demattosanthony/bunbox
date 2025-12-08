@@ -1,13 +1,20 @@
 import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeaturesGrid } from "@/components/features-grid";
+import { TypingTerminal } from "@/components/typing-terminal";
 
 export default function HomePage() {
   return (
     <div className="relative min-h-screen">
       {/* Hero Section */}
       <div className="relative isolate pt-14">
-        <div className="mx-auto max-w-7xl px-6 py-24 sm:py-32 lg:px-8">
+        {/* Background Grid */}
+        <div
+          className="absolute inset-0 bg-grid-pattern bg-grid-fade pointer-events-none"
+          aria-hidden="true"
+        />
+
+        <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
           <div className="mx-auto max-w-4xl text-center">
             {/* Headline with mixed typography */}
             <h1 className="text-5xl font-semibold tracking-tight sm:text-7xl text-foreground leading-[1.1]">
@@ -26,7 +33,7 @@ export default function HomePage() {
             <div className="mt-10 flex items-center justify-center gap-x-4">
               <Button
                 size="lg"
-                className="h-12 px-8 text-base font-medium"
+                className="h-12 px-8 text-base font-medium transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
                 asChild
               >
                 <a href="/docs/introduction">Quick start</a>
@@ -34,7 +41,7 @@ export default function HomePage() {
               <Button
                 size="lg"
                 variant="outline"
-                className="h-12 px-6 text-base font-medium"
+                className="h-12 px-6 text-base font-medium transition-all duration-200 hover:scale-[1.02]"
                 asChild
               >
                 <a
@@ -52,53 +59,7 @@ export default function HomePage() {
 
           {/* Terminal Code Block */}
           <div className="mt-16 mx-auto max-w-3xl">
-            <div className="rounded-xl bg-zinc-900 shadow-2xl overflow-hidden">
-              {/* Terminal Header */}
-              <div className="flex items-center gap-2 px-4 py-3 bg-zinc-800/50">
-                <div className="h-3 w-3 rounded-full bg-red-500" />
-                <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                <div className="h-3 w-3 rounded-full bg-green-500" />
-              </div>
-
-              {/* Terminal Content */}
-              <div className="p-6 font-mono text-sm leading-relaxed">
-                <div className="text-zinc-500"># Create a new Bunbox app</div>
-                <div className="mt-1">
-                  <span className="text-green-400">$</span>{" "}
-                  <span className="text-white">bun create bunbox my-app</span>
-                </div>
-
-                <div className="mt-4 text-zinc-500"># Start the dev server</div>
-                <div className="mt-1">
-                  <span className="text-green-400">$</span>{" "}
-                  <span className="text-white">cd my-app && bun dev</span>
-                </div>
-                <div className="mt-1">
-                  <span className="text-cyan-400">Ready</span>{" "}
-                  <span className="text-zinc-400">
-                    in <span className="text-white">4ms</span> at{" "}
-                    <span className="text-blue-400 underline">
-                      http://localhost:3000
-                    </span>
-                  </span>
-                </div>
-
-                <div className="mt-4 text-zinc-500"># Deploy to production</div>
-                <div className="mt-1">
-                  <span className="text-green-400">$</span>{" "}
-                  <span className="text-white">bun run build && bun start</span>
-                </div>
-                <div className="mt-1">
-                  <span className="text-cyan-400">Server</span>{" "}
-                  <span className="text-zinc-400">
-                    running at{" "}
-                    <span className="text-blue-400 underline">
-                      https://my-app.com
-                    </span>
-                  </span>
-                </div>
-              </div>
-            </div>
+            <TypingTerminal />
           </div>
         </div>
       </div>
