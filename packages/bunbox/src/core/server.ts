@@ -24,6 +24,7 @@ import {
   scanJobs,
 } from "./scanner";
 import { jobManager } from "./jobs";
+import { ApiError, ValidationError, errors } from "./errors";
 import { renderPage } from "./ssr";
 import { generateRoutesFile, generateApiClient } from "./generator";
 import { createWatcher } from "./watcher";
@@ -651,6 +652,14 @@ class BunboxServer {
       }
       return await this.handleApiMethod(req, route, handler);
     } catch (error) {
+      // Handle known error types that might bubble up
+      if (error instanceof ValidationError) {
+        return error.toResponse();
+      }
+      if (error instanceof ApiError) {
+        return error.toResponse();
+      }
+      // Log module loading errors
       console.error(
         `Error loading API route ${method} ${toBunRoutePath(route)}:`,
         error
@@ -819,6 +828,13 @@ class BunboxServer {
       return null;
     }
 
+    // Security: Check body size limit (default 1MB)
+    const maxBodySize = this.config.maxBodySize ?? 1024 * 1024;
+    const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+    if (contentLength > maxBodySize) {
+      throw errors.payloadTooLarge(maxBodySize);
+    }
+
     const contentType = req.headers.get("content-type") || "";
 
     try {
@@ -880,6 +896,14 @@ class BunboxServer {
     try {
       return await handler(bunboxReq);
     } catch (error) {
+      // Handle known error types with proper responses
+      if (error instanceof ValidationError) {
+        return error.toResponse();
+      }
+      if (error instanceof ApiError) {
+        return error.toResponse();
+      }
+      // Log unknown errors and return generic 500
       console.error(`API route error: ${getErrorMessage(error)}`);
       return new Response("Internal Server Error", { status: 500 });
     }

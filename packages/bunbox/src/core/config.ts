@@ -47,6 +47,8 @@ export interface BunboxConfig {
   wsDir?: string;
   socketsDir?: string;
   publicDir?: string;
+  /** Maximum request body size in bytes (default: 1MB = 1048576) */
+  maxBodySize?: number;
   /** CORS configuration. Set to true for permissive defaults, or configure specific options */
   cors?: CorsConfig | boolean;
   /** OpenAPI documentation. Set to true for defaults, or configure specific options */
@@ -84,6 +86,7 @@ export interface ResolvedBunboxConfig {
   wsDir: string;
   socketsDir: string;
   publicDir: string;
+  maxBodySize: number;
   development: boolean;
   cors: ResolvedCorsConfig | null;
   openapi: ResolvedOpenAPIConfig | null;
@@ -157,6 +160,7 @@ const defaults: Omit<ResolvedBunboxConfig, "cors" | "openapi"> = {
   wsDir: join(process.cwd(), "app", "ws"),
   socketsDir: join(process.cwd(), "app", "sockets"),
   publicDir: join(process.cwd(), "public"),
+  maxBodySize: 1024 * 1024, // 1MB
   development: true,
 };
 
@@ -199,6 +203,8 @@ export async function resolveConfig(
       cliConfig.socketsDir ?? fileConfig.socketsDir ?? defaults.socketsDir,
     publicDir:
       cliConfig.publicDir ?? fileConfig.publicDir ?? defaults.publicDir,
+    maxBodySize:
+      cliConfig.maxBodySize ?? fileConfig.maxBodySize ?? defaults.maxBodySize,
     development,
     cors: resolveCorsConfig(cliConfig.cors ?? fileConfig.cors),
     openapi: resolveOpenAPIConfig(cliConfig.openapi ?? fileConfig.openapi),

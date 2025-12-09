@@ -3,7 +3,7 @@
  * Centralizes common patterns used across the framework
  */
 
-import { join } from "path";
+import { join, resolve } from "path";
 import { createRequire } from "module";
 import { mkdir, copyFile } from "node:fs/promises";
 import { createHash } from "crypto";
@@ -89,10 +89,19 @@ const assetPattern = new RegExp(`\\.(${ASSET_EXTENSIONS.join("|")})$`, "i");
 /**
  * Process an asset file: copy to .bunbox/assets with hashed filename
  * Returns the public URL or undefined if processing fails
+ * Includes path traversal protection to prevent accessing files outside project
  */
 async function processAssetFile(
   filePath: string
 ): Promise<{ publicUrl: string; contents: string } | undefined> {
+  // Security: Validate path is within project directory
+  const cwd = process.cwd();
+  const resolvedPath = resolve(filePath);
+  if (!resolvedPath.startsWith(cwd + "/") && resolvedPath !== cwd) {
+    console.error(`[bunbox] Security: Asset path outside project directory: ${filePath}`);
+    return undefined;
+  }
+
   const ext = filePath.split(".").pop()?.toLowerCase() || "";
   if (!ASSET_EXTENSIONS.includes(ext)) return undefined;
 
@@ -100,12 +109,12 @@ async function processAssetFile(
   const basename = filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || "asset";
   const filename = `${basename}.${hash}.${ext}`;
 
-  const assetsDir = join(process.cwd(), ".bunbox", "assets");
+  const assetsDir = join(cwd, ".bunbox", "assets");
   await mkdir(assetsDir, { recursive: true });
 
   const destPath = join(assetsDir, filename);
   try {
-    await copyFile(filePath, destPath);
+    await copyFile(resolvedPath, destPath);
   } catch (error) {
     console.error(`Failed to copy asset ${filePath}:`, error);
     return undefined;

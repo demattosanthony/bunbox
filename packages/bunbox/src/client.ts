@@ -5,6 +5,7 @@
 
 export { useRouter, useParams, navigate, redirect } from "./client/router";
 export { SocketClient } from "./client/socket";
+export type { ReconnectOptions, SocketErrorEvent, SocketMessage } from "./client/socket";
 export { useSocket } from "./client/useSocket";
 export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";

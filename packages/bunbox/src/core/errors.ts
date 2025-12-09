@@ -152,6 +152,12 @@ export const errors = {
     new ApiError(422, "unprocessable_entity", message, details),
 
   /**
+   * 413 Payload Too Large - Request body exceeds limit
+   */
+  payloadTooLarge: (maxSize: number) =>
+    new ApiError(413, "payload_too_large", `Request body exceeds maximum size of ${maxSize} bytes`),
+
+  /**
    * 429 Too Many Requests - Rate limit exceeded
    */
   rateLimit: (message = "Too many requests", retryAfter?: number) =>
