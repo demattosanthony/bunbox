@@ -1,35 +1,26 @@
 /**
  * Client-side router for Bunbox
- * Handles client-side navigation and route matching
+ * Handles client-side navigation, route matching, and loader data fetching
  */
 
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { getApplicableLayoutPaths } from "../core/shared.tsx";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
+import { getApplicableLayoutPaths } from "../core/shared";
 import type { PageProps } from "../core/types";
-
-/**
- * Import SSR context (will be null on client)
- */
-let SSRRouterContext: React.Context<{
-  pathname: string;
-  params: Record<string, string>;
-} | null> | null = null;
-if (typeof window === "undefined") {
-  try {
-    // Import from shared.tsx which has no Node.js dependencies
-    SSRRouterContext = require("../core/shared.tsx").SSRRouterContext;
-  } catch {
-    // SSR module not available
-  }
-}
 
 /**
  * Router context for sharing navigation state
  */
 interface RouterContextValue {
   pathname: string;
-  navigate: (path: string) => void;
+  navigate: (path: string) => Promise<void>;
   params: Record<string, string>;
+  isNavigating: boolean;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -45,7 +36,7 @@ export interface RouterProps {
   routes: RouteConfig[];
   layouts?: Map<string, React.ComponentType<{ children: React.ReactNode }>>;
   notFound?: React.ComponentType;
-  ssrPages?: Set<string>;
+  initialLoaderData?: unknown;
 }
 
 /**
@@ -129,36 +120,116 @@ function wrapWithLayouts(
 }
 
 /**
+ * Fetch loader data from the server
+ */
+async function fetchLoaderData(
+  pathname: string,
+  params: Record<string, string>,
+  query: Record<string, string>
+): Promise<unknown> {
+  try {
+    const res = await fetch("/__bunbox/loader", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pathname, params, query }),
+    });
+    const { data } = await res.json();
+    return data;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Client-side router component
  */
 export function Router({
   routes,
   layouts,
   notFound,
-  ssrPages = new Set(),
+  initialLoaderData,
 }: RouterProps) {
   const [currentPath, setCurrentPath] = useState(() =>
     typeof window !== "undefined" ? window.location.pathname : "/"
   );
+  const [loaderData, setLoaderData] = useState<unknown>(initialLoaderData);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Find matching route for current path
+  const findMatchingRoute = useCallback(
+    (pathname: string) => {
+      for (const route of routes) {
+        const match = matchRoute(pathname, route);
+        if (match) {
+          return { route, match };
+        }
+      }
+      return null;
+    },
+    [routes]
+  );
 
   // Navigate function for programmatic navigation
-  const navigateTo = (path: string) => {
-    if (typeof window === "undefined") return;
-    if (path !== currentPath) {
+  const navigateTo = useCallback(
+    async (path: string) => {
+      if (typeof window === "undefined") return;
+      if (path === currentPath) return;
+
+      setIsNavigating(true);
+
+      // Parse the new path
+      const url = new URL(path, window.location.origin);
+      const newPath = url.pathname;
+
+      // Find matching route to extract params
+      const matched = findMatchingRoute(newPath);
+      const params = matched?.match.params || {};
+
+      // Get query params
+      const query: Record<string, string> = {};
+      url.searchParams.forEach((value, key) => {
+        query[key] = value;
+      });
+
+      // Fetch loader data
+      const data = await fetchLoaderData(newPath, params, query);
+
+      // Update state
+      setLoaderData(data);
       window.history.pushState({}, "", path);
-      setCurrentPath(path);
-    }
-  };
+      setCurrentPath(newPath);
+      setIsNavigating(false);
+
+      // Scroll to top
+      window.scrollTo(0, 0);
+    },
+    [currentPath, findMatchingRoute]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Scroll to top on navigation
-    window.scrollTo(0, 0);
-
     // Handle popstate (back/forward buttons)
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
+    const handlePopState = async () => {
+      const newPath = window.location.pathname;
+      setIsNavigating(true);
+
+      // Find matching route to extract params
+      const matched = findMatchingRoute(newPath);
+      const params = matched?.match.params || {};
+
+      // Get query params
+      const query: Record<string, string> = {};
+      new URL(window.location.href).searchParams.forEach((value, key) => {
+        query[key] = value;
+      });
+
+      // Fetch loader data for back/forward navigation
+      const data = await fetchLoaderData(newPath, params, query);
+
+      setLoaderData(data);
+      setCurrentPath(newPath);
+      setIsNavigating(false);
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -186,24 +257,8 @@ export function Router({
           return; // Let browser handle the request directly
         }
 
-        // Don't intercept navigation to SSR pages - let browser do full page load
-        // so the server can render the page
-        const isSSRPage = Array.from(ssrPages).some((ssrPath) => {
-          // Convert route pattern [slug] to regex pattern
-          const pattern = ssrPath.replace(/\[([^\]]+)\]/g, "[^/]+");
-          const regex = new RegExp(`^${pattern}$`);
-          return regex.test(newPath);
-        });
-
-        if (isSSRPage) {
-          return; // Let browser handle full page navigation
-        }
-
         e.preventDefault();
-        if (newPath !== currentPath) {
-          window.history.pushState({}, "", link.href);
-          setCurrentPath(newPath);
-        }
+        navigateTo(link.href);
       }
     };
 
@@ -213,20 +268,12 @@ export function Router({
       window.removeEventListener("popstate", handlePopState);
       document.removeEventListener("click", handleClick);
     };
-  }, [currentPath, ssrPages]);
+  }, [findMatchingRoute, navigateTo]);
 
   // Find matching route
-  let matchedRoute: RouteConfig | null = null;
-  let routeMatch: { params: Record<string, string> } | null = null;
-
-  for (const route of routes) {
-    const match = matchRoute(currentPath, route);
-    if (match) {
-      matchedRoute = route;
-      routeMatch = match;
-      break;
-    }
-  }
+  const matched = findMatchingRoute(currentPath);
+  const matchedRoute = matched?.route || null;
+  const routeMatch = matched?.match || null;
 
   // Get query parameters
   const query: Record<string, string> = {};
@@ -242,6 +289,7 @@ export function Router({
     pathname: currentPath,
     navigate: navigateTo,
     params: routeMatch?.params || {},
+    isNavigating,
   };
 
   // Render content
@@ -255,9 +303,10 @@ export function Router({
   } else {
     // Render matched route
     const PageComponent = matchedRoute.component;
-    const pageProps = {
+    const pageProps: PageProps = {
       params: routeMatch?.params || {},
       query,
+      data: loaderData,
     };
 
     const applicableLayouts = getLayoutsForPath(currentPath, layouts);
@@ -293,26 +342,14 @@ function DefaultNotFound() {
 export function useRouter() {
   const context = useContext(RouterContext);
 
-  // Try to get SSR context if client context is not available
+  // During SSR, return safe defaults since there's no Router provider
   if (!context) {
-    // During SSR, try to use SSR router context
-    if (typeof window === "undefined" && SSRRouterContext) {
-      const ssrContext = useContext(SSRRouterContext);
-      if (ssrContext) {
-        return {
-          pathname: ssrContext.pathname,
-          navigate: () => {},
-          params: ssrContext.params,
-        };
-      }
-    }
-
-    // Fallback for cases where neither context is available
     if (typeof window === "undefined") {
       return {
         pathname: "/",
-        navigate: () => {},
+        navigate: async () => {},
         params: {},
+        isNavigating: false,
       };
     }
 
@@ -330,6 +367,10 @@ export function useRouter() {
 export function useParams(): Record<string, string> {
   const context = useContext(RouterContext);
   if (!context) {
+    // During SSR, return empty params since there's no Router provider
+    if (typeof window === "undefined") {
+      return {};
+    }
     throw new Error("useParams must be used within a Router component");
   }
   return context.params;
@@ -342,5 +383,14 @@ export function navigate(path: string) {
   if (typeof window !== "undefined") {
     window.history.pushState({}, "", path);
     window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+}
+
+/**
+ * Redirect to a path
+ */
+export function redirect(path: string) {
+  if (typeof window !== "undefined") {
+    window.location.replace(path);
   }
 }

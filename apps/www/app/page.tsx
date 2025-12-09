@@ -7,7 +7,7 @@ export default function HomePage() {
   return (
     <div className="relative min-h-screen">
       {/* Hero Section */}
-      <div className="relative isolate pt-14">
+      <div className="relative isolate sm:pt-14">
         {/* Background Grid */}
         <div
           className="absolute inset-0 bg-grid-pattern bg-grid-fade pointer-events-none"
@@ -25,8 +25,8 @@ export default function HomePage() {
 
             <p className="mt-8 text-lg leading-8 text-muted-foreground max-w-2xl mx-auto">
               Create production-ready React applications with file-based
-              routing, server components, and API routes. All powered by Bun's
-              blazing speed.
+              routing, server-side rendering, and API routes. All powered by
+              Bun's blazing speed.
             </p>
 
             {/* CTA Buttons */}

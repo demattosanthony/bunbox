@@ -7,12 +7,10 @@ category: Core Concepts
 
 ## Root Layout
 
-Every app must have a root layout:
+Every app should have a root layout:
 
 ```tsx
 // app/layout.tsx
-"use server";
-
 import type { PageMetadata } from "@ademattos/bunbox";
 
 export const metadata: PageMetadata = {
@@ -43,8 +41,6 @@ Create layouts for specific sections:
 
 ```tsx
 // app/dashboard/layout.tsx
-"use server";
-
 export default function DashboardLayout({
   children,
 }: {
@@ -77,28 +73,29 @@ app/
 
 The settings page will be wrapped by all three layouts.
 
-## Shared Data
+## Interactive Layouts
 
-Pass data through layouts:
+Layouts are fully hydrated and support React hooks:
 
 ```tsx
 // app/layout.tsx
-"use server";
+import { useState } from "react";
 
-async function getUser() {
-  return { name: "John Doe" };
-}
-
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getUser();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div>
-      <header>Welcome, {user.name}</header>
+      <header>
+        <button onClick={() => setMenuOpen(!menuOpen)}>
+          Toggle Menu
+        </button>
+        {menuOpen && <nav>{/* Navigation */}</nav>}
+      </header>
       <main>{children}</main>
     </div>
   );
@@ -120,8 +117,6 @@ Layouts preserve state across navigation. Use them for:
 Layouts can export metadata:
 
 ```tsx
-"use server";
-
 import type { PageMetadata } from "@ademattos/bunbox";
 
 export const metadata: PageMetadata = {
@@ -129,9 +124,36 @@ export const metadata: PageMetadata = {
   description: "User dashboard",
 };
 
-export default function DashboardLayout({ children }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return <div>{children}</div>;
 }
 ```
 
 Page metadata takes precedence over layout metadata.
+
+## Loading States in Layouts
+
+Show loading indicators during navigation:
+
+```tsx
+import { useRouter } from "@ademattos/bunbox/client";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { isNavigating } = useRouter();
+
+  return (
+    <div>
+      {isNavigating && <div className="loading-indicator" />}
+      <main>{children}</main>
+    </div>
+  );
+}
+```

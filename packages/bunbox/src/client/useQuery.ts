@@ -76,6 +76,65 @@ export function clearQueryCacheKey(
 }
 
 /**
+ * Build request URL with params and query string
+ */
+function buildRequestUrl(
+  path: string,
+  opts?: { params?: Record<string, unknown>; query?: Record<string, unknown> }
+): string {
+  let url = path;
+
+  // Handle params (replace [param] with actual value)
+  if (opts?.params) {
+    for (const [k, v] of Object.entries(opts.params)) {
+      url = url.replace(`[${k}]`, String(v));
+    }
+  }
+
+  // Handle query params
+  if (opts?.query) {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(opts.query)) {
+      if (v !== undefined && v !== null) {
+        p.append(k, String(v));
+      }
+    }
+    const queryString = p.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+  }
+
+  // Make the request relative in browser, absolute on server
+  if (url.startsWith("/") && typeof window === "undefined") {
+    url = `http://${process.env.BUNBOX_HOSTNAME || "localhost"}:${
+      process.env.BUNBOX_PORT || "3000"
+    }${url}`;
+  }
+
+  return url;
+}
+
+/**
+ * Execute fetch with standard options
+ */
+function executeFetch(
+  url: string,
+  method: string,
+  opts?: { body?: unknown; headers?: HeadersInit }
+): Promise<Response> {
+  return fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...opts?.headers,
+    },
+    body:
+      opts?.body && method !== "GET" ? JSON.stringify(opts.body) : undefined,
+  });
+}
+
+/**
  * Create a query hook for an API function
  * This is used internally by the generated API client
  */
@@ -127,50 +186,9 @@ export function createQueryHook<TResponse>(
       setError(undefined);
 
       try {
-        // Build the request URL
-        let url = path;
-
         const currentOpts = optsRef.current;
-
-        // Handle params (replace [param] with actual value)
-        if (currentOpts?.params) {
-          for (const [k, v] of Object.entries(currentOpts.params)) {
-            url = url.replace(`[${k}]`, String(v));
-          }
-        }
-
-        // Handle query params
-        if (currentOpts?.query) {
-          const p = new URLSearchParams();
-          for (const [k, v] of Object.entries(currentOpts.query)) {
-            if (v !== undefined && v !== null) {
-              p.append(k, String(v));
-            }
-          }
-          const queryString = p.toString();
-          if (queryString) {
-            url += `?${queryString}`;
-          }
-        }
-
-        // Make the request relative in browser, absolute on server
-        if (url.startsWith("/") && typeof window === "undefined") {
-          url = `http://${process.env.BUNBOX_HOSTNAME || "localhost"}:${
-            process.env.BUNBOX_PORT || "3000"
-          }${url}`;
-        }
-
-        const res = await fetch(url, {
-          method,
-          headers: {
-            "Content-Type": "application/json",
-            ...currentOpts?.headers,
-          },
-          body:
-            currentOpts?.body && method !== "GET"
-              ? JSON.stringify(currentOpts.body)
-              : undefined,
-        });
+        const url = buildRequestUrl(path, currentOpts);
+        const res = await executeFetch(url, method, currentOpts);
 
         if (!res.ok) {
           throw new Error(await res.text());
@@ -221,50 +239,9 @@ export function createQueryHook<TResponse>(
     setError(undefined);
 
     try {
-      // Build the request URL
-      let url = path;
-
       const currentOpts = optsRef.current;
-
-      // Handle params (replace [param] with actual value)
-      if (currentOpts?.params) {
-        for (const [k, v] of Object.entries(currentOpts.params)) {
-          url = url.replace(`[${k}]`, String(v));
-        }
-      }
-
-      // Handle query params
-      if (currentOpts?.query) {
-        const p = new URLSearchParams();
-        for (const [k, v] of Object.entries(currentOpts.query)) {
-          if (v !== undefined && v !== null) {
-            p.append(k, String(v));
-          }
-        }
-        const queryString = p.toString();
-        if (queryString) {
-          url += `?${queryString}`;
-        }
-      }
-
-      // Make the request relative in browser, absolute on server
-      if (url.startsWith("/") && typeof window === "undefined") {
-        url = `http://${process.env.BUNBOX_HOSTNAME || "localhost"}:${
-          process.env.BUNBOX_PORT || "3000"
-        }${url}`;
-      }
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...currentOpts?.headers,
-        },
-        body:
-          currentOpts?.body && method !== "GET"
-            ? JSON.stringify(currentOpts.body)
-            : undefined,
-      });
+      const url = buildRequestUrl(path, currentOpts);
+      const res = await executeFetch(url, method, currentOpts);
 
       if (!res.ok) {
         throw new Error(await res.text());

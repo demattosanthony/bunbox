@@ -7,7 +7,6 @@ import { join } from "path";
 import { mkdir } from "node:fs/promises";
 import { scanPageRoutes, scanLayouts, scanApiRoutes } from "./scanner";
 import { routePathToUrl, toBunRoutePath } from "./router";
-import { checkUseServer } from "./ssr";
 import { dynamicImport, resolveAbsolutePath } from "./utils";
 import {
   buildApiObject,
@@ -73,8 +72,7 @@ function insertRouteMethod(
 
 /**
  * Generate routes file for client-side hydration
- * SSR pages ("use server") are NOT included in client routes - they're server-only
- * Only client-rendered pages are in the client bundle
+ * All pages are included in the client bundle for full hydration
  */
 export async function generateRoutesFile(appDir: string): Promise<string> {
   const pageRoutes = (await scanPageRoutes(appDir)).sort((a, b) =>
@@ -85,31 +83,20 @@ export async function generateRoutesFile(appDir: string): Promise<string> {
   const imports: string[] = [];
   const routeExports: string[] = [];
   const layoutExports: string[] = [];
-  const ssrPagePaths: string[] = [];
 
-  // Check which pages have "use server" directive
-  const pageEntries = await Promise.all(
-    pageRoutes.map(async (route, index) => {
-      const routePath = routePathToUrl(route.filepath);
-      const importName = `Page${index}`;
-      const isSSR = await checkUseServer(join(appDir, route.filepath));
-      return { importName, routePath, filepath: route.filepath, isSSR };
-    })
-  );
+  // Build page entries
+  const pageEntries = pageRoutes.map((route, index) => {
+    const routePath = routePathToUrl(route.filepath);
+    const importName = `Page${index}`;
+    return { importName, routePath, filepath: route.filepath };
+  });
 
-  // Only import NON-SSR pages into client bundle
-  // SSR pages are server-only and don't run on client
+  // Import ALL pages into client bundle
   for (const entry of pageEntries) {
-    if (entry.isSSR) {
-      // Track SSR pages for navigation handling
-      ssrPagePaths.push(`  "${entry.routePath}"`);
-    } else {
-      // Client-rendered pages get imported
-      imports.push(
-        `import ${entry.importName} from "../app/${entry.filepath}";`
-      );
-      routeExports.push(`  "${entry.routePath}": ${entry.importName}`);
-    }
+    imports.push(
+      `import ${entry.importName} from "../app/${entry.filepath}";`
+    );
+    routeExports.push(`  "${entry.routePath}": ${entry.importName}`);
   }
 
   // Import ALL layouts into client bundle (needed for client pages)
@@ -142,11 +129,6 @@ ${routeExports.join(",\n")}
 export const layouts = {
 ${layoutExports.join(",\n")}
 };
-
-// Pages with "use server" directive - server-only, trigger full page loads
-export const ssrPages = new Set([
-${ssrPagePaths.join(",\n")}
-]);
 `;
 
   await Bun.write(join(bunboxDir, "routes.ts"), routesContent);
@@ -159,10 +141,10 @@ ${ssrPagePaths.join(",\n")}
  */
 
 import { initBunbox } from "${hydratePath}";
-import { routes, layouts, ssrPages } from "./routes";
+import { routes, layouts } from "./routes";
 
 // Initialize the app
-initBunbox(routes, layouts, ssrPages).catch((error) => {
+initBunbox(routes, layouts).catch((error) => {
   console.error("Failed to initialize Bunbox app:", error);
 });
 `;

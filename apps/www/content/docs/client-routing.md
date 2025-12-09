@@ -7,23 +7,22 @@ category: Core Concepts
 
 ## Overview
 
-Bunbox provides client-side routing hooks for programmatic navigation and accessing route information.
+Bunbox provides client-side routing hooks for programmatic navigation and accessing route information. All navigation is handled client-side with automatic data loading.
 
 ## useRouter Hook
 
 Access router state and navigation:
 
 ```tsx
-"use client";
-
 import { useRouter } from "@ademattos/bunbox/client";
 
 export default function Navigation() {
-  const { pathname, navigate, params } = useRouter();
+  const { pathname, navigate, params, isNavigating } = useRouter();
 
   return (
     <div>
       <p>Current path: {pathname}</p>
+      {isNavigating && <p>Loading...</p>}
       <button onClick={() => navigate("/about")}>Go to About</button>
     </div>
   );
@@ -34,9 +33,10 @@ export default function Navigation() {
 
 ```typescript
 {
-  pathname: string;                    // Current pathname
-  navigate: (path: string) => void;     // Navigate to path
-  params: Record<string, string>;       // Route parameters
+  pathname: string;                          // Current pathname
+  navigate: (path: string) => Promise<void>; // Navigate to path
+  params: Record<string, string>;            // Route parameters
+  isNavigating: boolean;                     // True during navigation
 }
 ```
 
@@ -45,8 +45,6 @@ export default function Navigation() {
 Access route parameters:
 
 ```tsx
-"use client";
-
 import { useParams } from "@ademattos/bunbox/client";
 
 export default function BlogPost() {
@@ -61,8 +59,6 @@ export default function BlogPost() {
 Navigate programmatically:
 
 ```tsx
-"use client";
-
 import { navigate } from "@ademattos/bunbox/client";
 
 export default function Button() {
@@ -88,19 +84,21 @@ Links are automatically intercepted for client-side navigation.
 ## Complete Example
 
 ```tsx
-"use client";
-
 import { useRouter, useParams } from "@ademattos/bunbox/client";
 
 export default function UserProfile() {
   const { id } = useParams();
-  const { navigate, pathname } = useRouter();
+  const { navigate, pathname, isNavigating } = useRouter();
 
   return (
     <div>
       <h1>User Profile: {id}</h1>
       <p>Current path: {pathname}</p>
-      <button onClick={() => navigate("/")}>Go Home</button>
+      {isNavigating ? (
+        <p>Navigating...</p>
+      ) : (
+        <button onClick={() => navigate("/")}>Go Home</button>
+      )}
     </div>
   );
 }
@@ -108,10 +106,11 @@ export default function UserProfile() {
 
 ## Navigation Behavior
 
-- Client-side navigation is used for non-SSR pages
-- SSR pages trigger full page reloads
+- All navigation is client-side (SPA-style)
+- Loaders run on the server for each navigation
 - Browser back/forward buttons work automatically
 - Scroll position resets on navigation
+- `isNavigating` is true while fetching loader data
 
 ## Route Parameters
 
@@ -119,8 +118,6 @@ Access dynamic route parameters:
 
 ```tsx
 // app/blog/[slug]/page.tsx
-"use client";
-
 import { useParams } from "@ademattos/bunbox/client";
 
 export default function BlogPost() {
@@ -151,12 +148,27 @@ Navigate programmatically:
 ```tsx
 import { navigate } from "@ademattos/bunbox/client";
 
-function handleSubmit() {
+async function handleSubmit() {
   // Process form
-  navigate("/success");
+  await navigate("/success");
 }
 ```
 
-## SSR Pages
+## Loading States
 
-SSR pages (`"use server"`) use full page reloads for navigation. Client-side navigation hooks work for client-rendered pages.
+Show loading indicators during navigation:
+
+```tsx
+import { useRouter } from "@ademattos/bunbox/client";
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  const { isNavigating } = useRouter();
+
+  return (
+    <div>
+      {isNavigating && <div className="loading-bar" />}
+      {children}
+    </div>
+  );
+}
+```

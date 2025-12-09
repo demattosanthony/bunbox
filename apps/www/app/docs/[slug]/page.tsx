@@ -1,27 +1,26 @@
-"use server";
-
 import { getDoc } from "@/lib/docs";
 import { MarkdownContent } from "@/components/markdown-content";
-import type { PageMetadata } from "@ademattos/bunbox";
+import type { PageMetadata, LoaderContext, PageProps } from "@ademattos/bunbox";
 
-interface DocsPageProps {
-  params: { slug: string };
+export async function loader({ params }: LoaderContext) {
+  const doc = await getDoc(params.slug as string);
+  return { doc };
 }
 
-export async function metadata({
-  params,
-}: DocsPageProps): Promise<PageMetadata> {
-  const doc = await getDoc(params.slug);
-  return {
-    title: doc?.metadata.title
-      ? `${doc.metadata.title} - Bunbox Documentation`
-      : "Bunbox Documentation",
-    description: doc?.metadata.description || "Bunbox documentation",
-  };
+export const metadata: PageMetadata = {
+  title: "Bunbox Documentation",
+  description: "Bunbox documentation",
+};
+
+interface DocData {
+  doc: {
+    metadata: { title: string; description?: string };
+    content: string;
+  } | null;
 }
 
-export default async function DocsPage({ params }: DocsPageProps) {
-  const doc = await getDoc(params.slug);
+export default function DocsPage({ data }: PageProps) {
+  const { doc } = data as DocData;
 
   if (!doc) {
     return (

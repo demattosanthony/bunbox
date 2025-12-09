@@ -1,5 +1,2 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://bunbox.dev/sitemap.xml
-

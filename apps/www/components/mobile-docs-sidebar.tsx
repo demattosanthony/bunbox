@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,10 +13,21 @@ import { DocsSidebar } from "@/components/docs-sidebar";
 export function MobileDocsSidebar() {
   const [open, setOpen] = useState(false);
 
+  const handleClick = () => {
+    console.log("open", open);
+
+    setOpen(true);
+  };
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden"
+          onClick={handleClick}
+        >
           <Menu className="h-5 w-5" />
           <span className="sr-only">Toggle navigation menu</span>
         </Button>

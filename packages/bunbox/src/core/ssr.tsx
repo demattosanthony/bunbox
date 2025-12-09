@@ -6,10 +6,29 @@ import React from "react";
 import { renderToReadableStream } from "react-dom/server";
 import type { PageMetadata, PageModule, LayoutModule } from "./types";
 import { getFaviconContentType } from "./utils";
-import { SSRRouterContext } from "./shared.tsx";
 
-// Re-export for backwards compatibility
-export { SSRRouterContext };
+/**
+ * Build hashes for cache-busted asset URLs
+ */
+export interface BuildHashes {
+  clientHash?: string;
+  stylesHash?: string;
+}
+
+/**
+ * Generate asset URLs (hashed in production, fixed in development)
+ */
+function getAssetUrls(development: boolean, hashes?: BuildHashes) {
+  return {
+    client: development
+      ? "/__bunbox/client.js"
+      : `/__bunbox/client.${hashes?.clientHash || ""}.js`,
+    styles:
+      development || !hashes?.stylesHash
+        ? "/__bunbox/styles.css"
+        : `/__bunbox/styles.${hashes.stylesHash}.css`,
+  };
+}
 
 /**
  * HMR WebSocket client script for development hot reload
@@ -27,6 +46,12 @@ const HMR_SCRIPT = `(function() {
   ws.onerror = () => console.log('⚠️ HMR connection failed');
   ws.onclose = () => console.log('🔌 HMR disconnected');
 })();`;
+
+/**
+ * Theme script for flash-free dark mode (always injected, ~150 bytes)
+ * Harmless no-op if ThemeProvider isn't used
+ */
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("bunbox-theme")||"system",d=document.documentElement,r=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;d.classList.add(r)}catch(e){}})();`;
 
 /**
  * Merge metadata with page metadata taking precedence
@@ -49,60 +74,8 @@ function mergeMetadata(
 }
 
 /**
- * Check if a file has a specific directive ("use server" or "use client")
- */
-async function checkDirective(
-  filePath: string,
-  directive: "use server" | "use client"
-): Promise<boolean> {
-  try {
-    const file = Bun.file(filePath);
-    if (!(await file.exists())) return false;
-    const content = await file.text();
-
-    // Check for directive at the top of the file (within first few lines)
-    // Must be before any imports or code
-    const lines = content.split("\n").slice(0, 10);
-    const regex = new RegExp(`^["']${directive}["'];?$`);
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      // Skip empty lines and comments
-      if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("/*")) {
-        continue;
-      }
-      // Check if this line has the directive
-      if (regex.test(trimmed)) {
-        return true;
-      }
-      // If we hit any other code, directive must come before it
-      if (trimmed && !trimmed.startsWith("import")) {
-        break;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if a file has "use server" directive
- */
-export async function checkUseServer(filePath: string): Promise<boolean> {
-  return checkDirective(filePath, "use server");
-}
-
-/**
- * Check if a file has "use client" directive
- */
-export async function checkUseClient(filePath: string): Promise<boolean> {
-  return checkDirective(filePath, "use client");
-}
-
-/**
  * Render a React component to HTML with SSR using streaming
- * Includes client bundle for hydration of client components
+ * Includes client bundle for hydration
  */
 export async function renderPage(
   pageModule: PageModule,
@@ -110,7 +83,9 @@ export async function renderPage(
   params: Record<string, string>,
   query: Record<string, string>,
   development: boolean = false,
-  pathname: string = "/"
+  pathname: string = "/",
+  buildHashes?: BuildHashes,
+  loaderData?: unknown
 ): Promise<ReadableStream> {
   const PageComponent = pageModule.default;
 
@@ -128,6 +103,7 @@ export async function renderPage(
   let content: React.ReactElement = React.createElement(PageComponent, {
     params,
     query,
+    data: loaderData,
   });
 
   // Wrap with layouts from innermost to outermost
@@ -138,127 +114,63 @@ export async function renderPage(
     }
   }
 
-  // Wrap with SSR router context to provide pathname during SSR
-  content = React.createElement(
-    SSRRouterContext.Provider,
-    { value: { pathname, params } },
-    content
-  );
-
   // HMR script for development
-  const hmrScript = development ? (
-    <script dangerouslySetInnerHTML={{ __html: HMR_SCRIPT }} />
-  ) : null;
+  const hmrScript = development
+    ? React.createElement("script", {
+        dangerouslySetInnerHTML: { __html: HMR_SCRIPT },
+      })
+    : null;
 
   // Initial state for client hydration
-  const initScript = (
-    <script
-      dangerouslySetInnerHTML={{
-        __html: `window.__BUNBOX_DATA__=${JSON.stringify({ params, query, pathname, ssr: true })};`,
-      }}
-    />
-  );
+  const initScript = React.createElement("script", {
+    dangerouslySetInnerHTML: {
+      __html: `window.__BUNBOX_DATA__=${JSON.stringify({ params, query, pathname, loaderData })};`,
+    },
+  });
 
-  // Wrap in full HTML document structure for SSR
-  const fullDocument = (
-    <html lang="en">
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content={metadata.viewport} />
-        <title>{metadata.title}</title>
-        {metadata.favicon && (
-          <>
-            <link
-              rel="icon"
-              type={getFaviconContentType(metadata.favicon)}
-              href={`/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}`}
-            />
-            <link
-              rel="shortcut icon"
-              type={getFaviconContentType(metadata.favicon)}
-              href={`/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}`}
-            />
-          </>
-        )}
-        {metadata.description && (
-          <meta name="description" content={metadata.description} />
-        )}
-        {metadata.keywords && (
-          <meta name="keywords" content={metadata.keywords.join(", ")} />
-        )}
-        {metadata.author && <meta name="author" content={metadata.author} />}
-        <link rel="stylesheet" href="/__bunbox/styles.css" />
-      </head>
-      <body>
-        <div id="root">{content}</div>
-        {initScript}
-        <script type="module" src="/__bunbox/client.js" />
-        {hmrScript}
-      </body>
-    </html>
+  const assets = getAssetUrls(development, buildHashes);
+
+  // Wrap in full HTML document structure for SSR (using React.createElement to avoid JSX)
+  const fullDocument = React.createElement(
+    "html",
+    { lang: "en" },
+    React.createElement(
+      "head",
+      null,
+      React.createElement("meta", { charSet: "UTF-8" }),
+      React.createElement("meta", { name: "viewport", content: metadata.viewport }),
+      React.createElement("title", null, metadata.title),
+      // Theme script runs before stylesheet to prevent FOUC (always injected, harmless if unused)
+      React.createElement("script", { dangerouslySetInnerHTML: { __html: THEME_SCRIPT } }),
+      metadata.favicon &&
+        React.createElement("link", {
+          rel: "icon",
+          type: getFaviconContentType(metadata.favicon),
+          href: `/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}`,
+        }),
+      metadata.favicon &&
+        React.createElement("link", {
+          rel: "shortcut icon",
+          type: getFaviconContentType(metadata.favicon),
+          href: `/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}`,
+        }),
+      metadata.description &&
+        React.createElement("meta", { name: "description", content: metadata.description }),
+      metadata.keywords &&
+        React.createElement("meta", { name: "keywords", content: metadata.keywords.join(", ") }),
+      metadata.author &&
+        React.createElement("meta", { name: "author", content: metadata.author }),
+      React.createElement("link", { rel: "stylesheet", href: assets.styles })
+    ),
+    React.createElement(
+      "body",
+      null,
+      React.createElement("div", { id: "root" }, content),
+      initScript,
+      React.createElement("script", { type: "module", src: assets.client }),
+      hmrScript
+    )
   );
 
   return await renderToReadableStream(fullDocument);
-}
-
-/**
- * Generate HTML shell for client-side hydration
- * Used for pages without "use server" directive
- */
-export function generateHTMLShell(
-  params: Record<string, string>,
-  query: Record<string, string>,
-  metadata: PageMetadata = {},
-  development: boolean = false
-): string {
-  const merged = mergeMetadata(metadata, {});
-
-  // Build meta tags
-  const metaTags: string[] = [];
-  if (merged.description) {
-    metaTags.push(
-      `<meta name="description" content="${merged.description}" />`
-    );
-  }
-  if (merged.keywords?.length) {
-    metaTags.push(
-      `<meta name="keywords" content="${merged.keywords.join(", ")}" />`
-    );
-  }
-  if (merged.author) {
-    metaTags.push(`<meta name="author" content="${merged.author}" />`);
-  }
-  const metaTagsStr =
-    metaTags.length > 0 ? "\n    " + metaTags.join("\n    ") : "";
-
-  // Build favicon tag
-  const faviconTag = merged.favicon
-    ? `\n    <link rel="icon" type="${getFaviconContentType(
-        merged.favicon
-      )}" href="/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}" />
-    <link rel="shortcut icon" type="${getFaviconContentType(
-      merged.favicon
-    )}" href="/__bunbox/favicon${development ? `?v=${Date.now()}` : ""}" />`
-    : "";
-
-  // Build HMR script
-  const hmrScript = development ? `\n    <script>${HMR_SCRIPT}</script>` : "";
-
-  return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="${merged.viewport}" />
-    <title>${merged.title}</title>${metaTagsStr}${faviconTag}
-    <link rel="stylesheet" href="/__bunbox/styles.css" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>window.__BUNBOX_DATA__ = ${JSON.stringify({
-      params,
-      query,
-    })};</script>
-    <script type="module" src="/__bunbox/client.js"></script>${hmrScript}
-  </body>
-</html>`;
 }

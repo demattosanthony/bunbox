@@ -21,7 +21,7 @@ export default defineDeployConfig({
       port: 3002,
 
       // Domain for automatic HTTPS via Caddy (optional)
-      domain: "bunbox.anthonydemattos.com",
+      domain: "bunbox.org",
 
       // Number of releases to keep for rollback (default: 5)
       keepReleases: 2,

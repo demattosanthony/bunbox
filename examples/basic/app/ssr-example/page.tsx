@@ -1,25 +1,35 @@
-"use server";
-
-import type { PageMetadata, PageProps } from "@ademattos/bunbox";
+import type { PageMetadata, PageProps, LoaderContext } from "@ademattos/bunbox";
 
 export const metadata: PageMetadata = {
-  title: "SSR Example",
-  description: "Server-side rendering with Bunbox",
+  title: "Data Loading Example",
+  description: "Server-side data loading with Bunbox",
 };
 
-export default function SSRExample({ params, query }: PageProps) {
-  const serverTime = new Date().toISOString();
+interface LoaderData {
+  serverTime: string;
+  message: string;
+}
 
-  // This only runs on the server - no client hydration
-  console.log("\n[SSR] Rendered at:", serverTime);
-  console.log("[SSR] Query:", query);
+export async function loader({ query }: LoaderContext): Promise<LoaderData> {
+  // This runs on the server for both SSR and client-side navigation
+  console.log("\n[Loader] Executed at:", new Date().toISOString());
+  console.log("[Loader] Query:", query);
+
+  return {
+    serverTime: new Date().toISOString(),
+    message: query.name ? `Hello, ${query.name}!` : "Hello!",
+  };
+}
+
+export default function DataLoadingExample({ query, data }: PageProps) {
+  const { serverTime, message } = data as LoaderData;
 
   return (
     <div className="card">
-      <h1>Server-Side Rendering</h1>
+      <h1>Server Data Loading</h1>
 
       <p style={{ color: "#666", fontSize: "1.125rem", marginTop: "1rem" }}>
-        This page is server-only. No React runs on the client.
+        This page uses a loader to fetch data on the server.
       </p>
 
       <div
@@ -33,9 +43,9 @@ export default function SSRExample({ params, query }: PageProps) {
         }}
       >
         <p style={{ margin: 0, color: "#333" }}>
-          Add <code>"use server"</code> to the top of your page.
+          Export a <code>loader</code> function from your page.
           <br />
-          The page renders on the server only - fast, static HTML.
+          The loader runs on the server and data flows to your component.
         </p>
       </div>
 
@@ -50,10 +60,20 @@ export default function SSRExample({ params, query }: PageProps) {
         <div
           style={{ color: "#999", fontSize: "0.75rem", marginBottom: "0.5rem" }}
         >
-          RENDERED AT (SERVER)
+          LOADER DATA
         </div>
         <div style={{ fontFamily: "monospace", fontSize: "0.875rem" }}>
-          {serverTime}
+          {message}
+        </div>
+        <div
+          style={{
+            fontFamily: "monospace",
+            fontSize: "0.75rem",
+            color: "#666",
+            marginTop: "0.5rem",
+          }}
+        >
+          Fetched at: {serverTime}
         </div>
       </div>
 

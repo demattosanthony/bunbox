@@ -316,19 +316,20 @@ async function healthCheck(
   target: ResolvedTarget
 ): Promise<boolean> {
   try {
-    // First try /api/health endpoint, then fall back to /
-    // Use -w to get HTTP status code
-    const result = await ssh.exec(
-      `curl -sf -o /dev/null -w '%{http_code}' http://localhost:${target.port}/api/health 2>/dev/null || ` +
-        `curl -sf -o /dev/null -w '%{http_code}' http://localhost:${target.port}/ 2>/dev/null`
+    // First try /api/health endpoint
+    const healthResult = await ssh.exec(
+      `curl -s -o /dev/null -w '%{http_code}' http://localhost:${target.port}/api/health 2>/dev/null`
     );
 
-    if (result.code !== 0) {
-      return false;
-    }
+    let statusCode = parseInt(healthResult.stdout.trim(), 10);
 
-    // Parse the HTTP status code
-    const statusCode = parseInt(result.stdout.trim(), 10);
+    // If /api/health returns 404, fall back to checking /
+    if (statusCode === 404 || isNaN(statusCode)) {
+      const rootResult = await ssh.exec(
+        `curl -s -o /dev/null -w '%{http_code}' http://localhost:${target.port}/ 2>/dev/null`
+      );
+      statusCode = parseInt(rootResult.stdout.trim(), 10);
+    }
 
     // Consider 2xx and 3xx as healthy, 404 and other 4xx/5xx as unhealthy
     return statusCode >= 200 && statusCode < 400;

@@ -3,7 +3,7 @@
  * Safe for browser usage (no Node.js APIs)
  */
 
-export { useRouter, useParams, navigate } from "./client/router";
+export { useRouter, useParams, navigate, redirect } from "./client/router";
 export { SocketClient } from "./client/socket";
 export { useSocket } from "./client/useSocket";
 export { defineProtocol } from "./client/protocol";

@@ -48,6 +48,7 @@ export type {
   StreamingResponse,
   SSEResponse,
   JobConfig,
+  LoaderContext,
 } from "./core/types";
 
 export { defineJob, jobs } from "./core/jobs";
@@ -72,9 +73,6 @@ export type {
 
 export { useStream } from "./client/useStream";
 export type { UseStreamOptions, UseStreamResult } from "./client/useStream";
-
-export { ClientIsland, registerIsland } from "./client/island";
-export type { ClientIslandProps } from "./client/island";
 
 // OpenAPI generation utilities
 export {

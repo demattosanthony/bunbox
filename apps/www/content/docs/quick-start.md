@@ -75,8 +75,6 @@ Create a layout to wrap all pages:
 
 ```tsx
 // app/layout.tsx
-"use server";
-
 import React from "react";
 import type { PageMetadata } from "@ademattos/bunbox";
 

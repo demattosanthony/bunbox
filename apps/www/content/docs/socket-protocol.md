@@ -72,8 +72,6 @@ export function onLeave(user: SocketUser, ctx: SocketContext) {
 Use the protocol with `useSocket`:
 
 ```tsx
-"use client";
-
 import { useSocket } from "@ademattos/bunbox/client";
 import { ChatProtocol } from "@/app/sockets/chat/protocol";
 

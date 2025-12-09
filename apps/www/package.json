@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ademattos/bunbox": "^0.2.8",
+    "@ademattos/bunbox": "^0.3.0",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -26,12 +27,10 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.4.22",
     "bun-plugin-tailwind": "^0.1.2",
-    "bunbox-deploy": "^0.1.1",
+    "bunbox-deploy": "^0.1.4",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
     "typescript": "^5"

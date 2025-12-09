@@ -5,157 +5,206 @@ order: 15
 category: Advanced
 ---
 
-## Building for Production
+The easiest way to deploy a Bunbox app is with `bunbox-deploy` - a CLI tool that handles building, transferring, and starting your app on a VPS with automatic HTTPS.
 
-Build your application:
-
-```bash
-bun run build
-```
-
-This creates an optimized production build.
-
-## Starting in Production
-
-Run the production server:
+## Installation
 
 ```bash
-bun run start
+bun add -D bunbox-deploy
 ```
 
-## Environment Variables
+## Quick Start
 
-Set production environment variables:
+### 1. Initialize configuration
 
 ```bash
-export NODE_ENV=production
-export PORT=3000
-export DATABASE_URL=your-production-db
+bunx bunbox-deploy init
 ```
 
-Or use a `.env.production` file.
+This creates `bunbox.deploy.ts`:
 
-## Docker
+```typescript
+import { defineDeployConfig } from "bunbox-deploy";
 
-Deploy with Docker:
+export default defineDeployConfig({
+  targets: {
+    production: {
+      host: "your-server.com",
+      username: "deploy",
+      privateKey: "~/.ssh/id_ed25519",
+      deployPath: "/var/www/myapp",
+      name: "myapp",
+      port: 3000,
+
+      // Optional: Enable automatic HTTPS
+      domain: "myapp.com",
+
+      env: {
+        NODE_ENV: "production",
+        DATABASE_URL: "${DATABASE_URL}", // Uses local env var
+      },
+    },
+  },
+});
+```
+
+### 2. Setup the server
+
+```bash
+bunx bunbox-deploy setup production
+```
+
+This automatically installs Bun, PM2, and Caddy (if domain is configured) on your server.
+
+### 3. Deploy
+
+```bash
+bunx bunbox-deploy deploy production
+```
+
+That's it! Your app is live with automatic HTTPS.
+
+## What happens during deploy
+
+1. Builds your app locally (`bunbox build`)
+2. Transfers files via rsync
+3. Installs dependencies on server
+4. Updates the symlink to the new release
+5. Restarts the app via PM2
+6. Configures Caddy reverse proxy (if domain is set)
+7. Runs health check
+
+## Commands
+
+| Command                           | Description                       |
+| --------------------------------- | --------------------------------- |
+| `bunbox-deploy init`              | Create config file                |
+| `bunbox-deploy setup [target]`    | Setup server with Bun, PM2, Caddy |
+| `bunbox-deploy deploy [target]`   | Deploy to target                  |
+| `bunbox-deploy status [target]`   | Show deployment status            |
+| `bunbox-deploy rollback [target]` | Rollback to previous release      |
+| `bunbox-deploy logs [target]`     | View application logs             |
+| `bunbox-deploy ssh [target]`      | Open SSH session                  |
+
+### Deploy options
+
+```bash
+bunx bunbox-deploy deploy production --no-build    # Skip local build
+bunx bunbox-deploy deploy production --no-install  # Skip dependency install
+bunx bunbox-deploy deploy production --dry-run     # Preview without executing
+bunx bunbox-deploy deploy production -V            # Verbose output
+```
+
+## Configuration Options
+
+```typescript
+interface DeployTarget {
+  // SSH Connection
+  host: string; // Server hostname or IP
+  sshPort?: number; // SSH port (default: 22)
+  username: string; // SSH username
+  privateKey: string; // Path to SSH private key
+
+  // Deployment
+  deployPath: string; // Where to deploy (e.g., /var/www/myapp)
+  name: string; // PM2 process name
+
+  // Application
+  port?: number; // App port (default: 3000)
+  script?: string; // Script to run (default: "start")
+  env?: Record<string, string>; // Environment variables
+
+  // HTTPS
+  domain?: string; // Domain for Caddy auto-HTTPS
+
+  // Options
+  keepReleases?: number; // Releases to keep (default: 5)
+  exclude?: string[]; // Files to exclude from transfer
+}
+```
+
+## Git Deployment
+
+Instead of rsync, you can deploy by cloning from a git repository:
+
+```typescript
+export default defineDeployConfig({
+  targets: {
+    production: {
+      // ... other config
+      git: {
+        repo: "https://github.com/user/myapp.git",
+        branch: "main",
+        token: "${GITHUB_TOKEN}", // For private repos
+      },
+    },
+  },
+});
+```
+
+Test your git setup:
+
+```bash
+bunx bunbox-deploy setup-git production
+```
+
+## Server Directory Structure
+
+After deployment:
+
+```
+/var/www/myapp/
+├── current -> releases/20241203_143022/  # Symlink to active release
+├── releases/
+│   ├── 20241203_143022/                  # Current release
+│   └── 20241203_120000/                  # Previous (for rollback)
+├── shared/
+│   └── .env                              # Shared environment file
+├── logs/
+│   ├── output.log
+│   └── error.log
+└── ecosystem.config.js                   # PM2 configuration
+```
+
+## Requirements
+
+**Local machine:**
+
+- Bun
+- rsync
+- SSH key configured
+
+**Server:**
+
+- Ubuntu/Debian (for auto-install)
+- SSH access with key authentication
+- sudo access (for Caddy)
+
+## Alternative: Docker
+
+If you prefer Docker:
 
 ```dockerfile
-# Dockerfile
 FROM oven/bun:1
 
 WORKDIR /app
-
-# Copy package files
 COPY package.json bun.lock ./
-
-# Install dependencies
 RUN bun install --frozen-lockfile
-
-# Copy application code
 COPY . .
-
-# Build the application
 RUN bun run build
 
-# Expose port
 EXPOSE 3000
-
-# Start the server
 CMD ["bun", "start"]
 ```
-
-Build and run:
 
 ```bash
 docker build -t my-bunbox-app .
 docker run -p 3000:3000 my-bunbox-app
 ```
 
-## VPS Deployment
-
-Deploy to a VPS:
-
-1. Install Bun on your server:
-
-```bash
-curl -fsSL https://bun.sh/install | bash
-```
-
-2. Clone your repository:
-
-```bash
-git clone https://github.com/yourusername/your-app.git
-cd your-app
-```
-
-3. Install dependencies:
-
-```bash
-bun install
-```
-
-4. Build for production:
-
-```bash
-bun run build
-```
-
-5. Start with PM2:
-
-```bash
-npm install -g pm2
-pm2 start "bun start" --name my-app
-pm2 startup
-pm2 save
-```
-
-## Caddy Reverse Proxy
-
-Configure Caddy as a reverse proxy with automatic HTTPS:
-
-1. Install Caddy:
-
-```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install caddy
-```
-
-2. Create a Caddyfile (`/etc/caddy/Caddyfile`):
-
-```caddy
-yourdomain.com {
-    reverse_proxy localhost:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote}
-        header_up X-Forwarded-For {remote}
-        header_up X-Forwarded-Proto {scheme}
-    }
-}
-```
-
-3. Start and enable Caddy:
-
-```bash
-sudo systemctl enable caddy
-sudo systemctl start caddy
-sudo caddy reload --config /etc/caddy/Caddyfile
-```
-
-Caddy automatically provisions and renews SSL certificates via Let's Encrypt - no additional configuration needed!
-
-## Performance Tips
-
-1. **Enable compression** - Caddy handles gzip automatically
-2. **Use a CDN** - Serve static assets from a CDN
-3. **Set caching headers** - Cache static assets aggressively
-4. **Monitor performance** - Use tools like PM2 or systemd
-
 ## Health Checks
 
-Add a health check endpoint:
+Add a health check endpoint for monitoring:
 
 ```typescript
 // app/api/health/route.ts
@@ -165,37 +214,3 @@ export const healthCheck = route.get().handle(async () => {
   return { status: "ok", timestamp: Date.now() };
 });
 ```
-
-## Logging
-
-Add logging for production:
-
-```typescript
-// Middleware for logging
-const logger = async (ctx) => {
-  const start = Date.now();
-  console.log(`${ctx.method} ${ctx.url}`);
-  const result = await next(ctx);
-  console.log(`${ctx.method} ${ctx.url} - ${Date.now() - start}ms`);
-  return result;
-};
-```
-
-## Monitoring
-
-Monitor your application with:
-
-- **PM2 monitoring**: `pm2 monit`
-- **System metrics**: CPU, memory, disk usage
-- **Application logs**: Error tracking and debugging
-- **Uptime monitoring**: Services like UptimeRobot
-
-## Zero-Downtime Deployment
-
-Use PM2 for zero-downtime deployments:
-
-```bash
-pm2 reload my-app
-```
-
-This gracefully restarts your application without dropping connections.

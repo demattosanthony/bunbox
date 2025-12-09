@@ -45,8 +45,8 @@ export default function About() {
           etc. from route files
         </li>
         <li>
-          <strong>Web App:</strong> React pages with optional SSR (add{" "}
-          <code>"use server"</code>)
+          <strong>Web App:</strong> React pages with SSR and server-side data
+          loading via <code>loader</code>
         </li>
         <li>
           <strong>Socket Server:</strong> Type-safe real-time handlers with user

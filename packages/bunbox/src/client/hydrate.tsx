@@ -2,17 +2,16 @@
  * BunBox Client Hydration
  * This file is automatically included by BunBox and handles:
  * - Automatic route discovery from /app directory
- * - Client-side routing for non-SSR pages
- * - SSR pages: Server-only with optional client island hydration
+ * - Client-side routing with loader support
+ * - Full React tree hydration
  * - HMR support
  */
 
 import React from "react";
-import { createRoot, hydrateRoot } from "react-dom/client";
+import { hydrateRoot } from "react-dom/client";
 import { Router, createRoutePattern, type RouteConfig } from "./router";
 import type { RouteModules, LayoutModules } from "../core/types";
 import { countStaticSegments } from "../core/router";
-import { getIslandRegistry } from "./island";
 
 // Check if we have SSR content
 declare global {
@@ -21,76 +20,26 @@ declare global {
       params: Record<string, string>;
       query: Record<string, string>;
       pathname: string;
-      ssr?: boolean;
+      loaderData?: unknown;
     };
   }
 }
 
 /**
- * Hydrate client islands within SSR pages
- * Islands are marked with data-bunbox-island attribute
- */
-function hydrateIslands() {
-  const islands = document.querySelectorAll("[data-bunbox-island]");
-  const registry = getIslandRegistry();
-
-  islands.forEach((island) => {
-    const componentName = island.getAttribute("data-island-component");
-    const propsJson = island.getAttribute("data-island-props");
-
-    if (!componentName) return;
-
-    const Component = registry.get(componentName);
-    if (!Component) {
-      console.warn(`[Bunbox] Island component "${componentName}" not registered`);
-      return;
-    }
-
-    try {
-      const props = propsJson ? JSON.parse(propsJson) : {};
-      hydrateRoot(island as HTMLElement, React.createElement(Component, props));
-    } catch (error) {
-      console.error(`[Bunbox] Failed to hydrate island "${componentName}":`, error);
-    }
-  });
-}
-
-/**
- * Set up navigation listeners for SSR pages
- * All navigation from SSR pages triggers full page load
- */
-function setupSSRNavigation() {
-  // Navigation is handled by browser - no interception needed
-  // Links work naturally with full page loads
-}
-
-/**
  * Initialize the app with provided routes
- * SSR pages: Hydrate islands only, no full React tree
- * Client pages: Full React rendering
+ * Hydrates the full React tree with server-rendered content
  */
 export async function initBunbox(
   routeModules: RouteModules,
-  layoutModules: LayoutModules,
-  ssrPages: Set<string> = new Set()
+  layoutModules: LayoutModules
 ) {
-  const isCurrentPageSSR = window.__BUNBOX_DATA__?.ssr === true;
-
-  // For SSR pages: Only hydrate client islands, not the full page
-  if (isCurrentPageSSR) {
-    setupSSRNavigation();
-    hydrateIslands();
-    return;
-  }
-
-  // For client-rendered pages: Run React normally
+  // Setup routes
   const routes: RouteConfig[] = [];
   const layouts = new Map<
     string,
     React.ComponentType<{ children: React.ReactNode }>
   >();
 
-  // Setup routes
   for (const [routePath, component] of Object.entries(routeModules)) {
     const { pattern, paramNames } = createRoutePattern(routePath);
     routes.push({
@@ -118,8 +67,11 @@ export async function initBunbox(
     return a.path.length - b.path.length;
   });
 
+  // Get initial loader data from server
+  const initialLoaderData = window.__BUNBOX_DATA__?.loaderData;
+
   const App = () => (
-    <Router routes={routes} layouts={layouts} ssrPages={ssrPages} />
+    <Router routes={routes} layouts={layouts} initialLoaderData={initialLoaderData} />
   );
 
   const rootElement = document.getElementById("root");
@@ -129,11 +81,10 @@ export async function initBunbox(
     );
   }
 
-  // HMR support
+  // Hydrate the server-rendered content (HMR uses stable root reference)
   if (import.meta.hot) {
-    const root = (import.meta.hot.data.root ??= createRoot(rootElement));
-    root.render(<App />);
+    import.meta.hot.data.root ??= hydrateRoot(rootElement, <App />);
   } else {
-    createRoot(rootElement).render(<App />);
+    hydrateRoot(rootElement, <App />);
   }
 }

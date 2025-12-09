@@ -1,5 +1,3 @@
-"use client";
-
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -28,9 +26,7 @@ function CopyButton({ code }: { code: string }) {
         "absolute top-3 right-3 z-20 p-2 rounded-md cursor-pointer",
         "transition-all duration-200 pointer-events-auto",
         "bg-zinc-700/80 hover:bg-zinc-600",
-        copied
-          ? "opacity-100"
-          : "opacity-0 group-hover:opacity-100"
+        copied ? "opacity-100" : "opacity-0 group-hover:opacity-100"
       )}
       aria-label={copied ? "Copied!" : "Copy code"}
     >
@@ -173,7 +169,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
             );
           },
           ul: ({ children }) => (
-            <ul className="my-4 ml-6 space-y-2 text-[15px] text-muted-foreground [&>li]:relative [&>li]:pl-4 [&>li]:before:content-['–'] [&>li]:before:absolute [&>li]:before:left-[-0.5rem] [&>li]:before:text-muted-foreground/60">
+            <ul className="my-4 ml-6 space-y-2 text-[15px] text-muted-foreground [&>li]:relative [&>li]:pl-4 [&>li]:before:content-['–'] [&>li]:before:absolute [&>li]:before:-left-2 [&>li]:before:text-muted-foreground/60">
               {children}
             </ul>
           ),

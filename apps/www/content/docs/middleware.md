@@ -141,14 +141,22 @@ export const requireAuth = async (ctx) => {
   return { user };
 };
 
-// middleware/cors.ts
-export const cors = async (ctx) => {
-  return {
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE",
-    },
-  };
+// middleware/rateLimit.ts
+const requestCounts = new Map<string, { count: number; resetAt: number }>();
+
+export const rateLimit = async (ctx) => {
+  const ip = ctx.headers.get("x-forwarded-for") ?? "unknown";
+  const now = Date.now();
+  const limit = requestCounts.get(ip);
+
+  if (limit && now < limit.resetAt && limit.count >= 100) {
+    throw new Error("Rate limit exceeded");
+  }
+
+  requestCounts.set(ip, {
+    count: (limit?.count ?? 0) + 1,
+    resetAt: limit?.resetAt ?? now + 60000,
+  });
 };
 ```
 
@@ -156,16 +164,18 @@ Use in routes:
 
 ```typescript
 import { requireAuth } from "@/middleware/auth";
-import { cors } from "@/middleware/cors";
+import { rateLimit } from "@/middleware/rateLimit";
 
 export const getProtectedUser = route
   .get()
-  .use(cors)
+  .use(rateLimit)
   .use(requireAuth)
   .handle(async (ctx) => {
     return { user: ctx.user };
   });
 ```
+
+> **Note:** For CORS configuration, use `bunbox.config.ts` instead of middleware. See [Configuration](/docs/configuration#cors) for details.
 
 ## Conditional Middleware
 

@@ -25,44 +25,57 @@ This creates a page at `/about`.
 
 ## Page Props
 
-Pages receive `params` and `query` as props:
+Pages receive `params`, `query`, and `data` as props:
 
 ```tsx
-interface PageProps {
-  params: Record<string, string>;
-  query: Record<string, string>;
-}
+import type { PageProps } from "@ademattos/bunbox";
 
-export default function Page({ params, query }: PageProps) {
+export default function Page({ params, query, data }: PageProps) {
   return (
     <div>
       <h1>Params: {JSON.stringify(params)}</h1>
       <p>Query: {JSON.stringify(query)}</p>
+      <p>Data: {JSON.stringify(data)}</p>
     </div>
   );
 }
 ```
 
-## Server Components
+## Data Loading with Loaders
 
-By default, pages are client-side rendered. Add `"use server"` directive for server-side rendering:
+Use the `loader` export for server-side data fetching:
 
 ```tsx
-"use server";
+import type { LoaderContext, PageProps } from "@ademattos/bunbox";
 
-export default async function ServerPage() {
-  const data = await fetchData(); // Server-side data fetching
-  return <div>{data}</div>;
+// Loader runs on the server
+export async function loader({ params, query }: LoaderContext) {
+  const user = await db.getUser(params.id);
+  return { user };
+}
+
+// Page receives loader data via props.data
+export default function UserPage({ params, data }: PageProps) {
+  const { user } = data as { user: User };
+
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <p>{user.email}</p>
+    </div>
+  );
 }
 ```
+
+Loaders run:
+- On the server for initial page loads
+- On the server via fetch for client-side navigation
 
 ## Page Metadata
 
 Export metadata for SEO:
 
 ```tsx
-"use server";
-
 import type { PageMetadata } from "@ademattos/bunbox";
 
 export const metadata: PageMetadata = {
@@ -76,37 +89,11 @@ export default function AboutPage() {
 }
 ```
 
-## Data Fetching
+## Interactive Components
 
-Fetch data directly in server components:
-
-```tsx
-"use server";
-
-async function getUser(id: string) {
-  const res = await fetch(`https://api.example.com/users/${id}`);
-  return res.json();
-}
-
-export default async function UserPage({ params }: { params: { id: string } }) {
-  const user = await getUser(params.id);
-
-  return (
-    <div>
-      <h1>{user.name}</h1>
-      <p>{user.email}</p>
-    </div>
-  );
-}
-```
-
-## Client Components
-
-For interactive components, use `"use client"`:
+All pages are fully hydrated and support React hooks:
 
 ```tsx
-"use client";
-
 import { useState } from "react";
 
 export default function CounterPage() {
@@ -116,6 +103,44 @@ export default function CounterPage() {
     <div>
       <p>Count: {count}</p>
       <button onClick={() => setCount(count + 1)}>Increment</button>
+    </div>
+  );
+}
+```
+
+## Combining Loaders with Interactivity
+
+Use loaders for initial data, React state for client interactions:
+
+```tsx
+import { useState } from "react";
+import type { LoaderContext, PageProps } from "@ademattos/bunbox";
+
+export async function loader({ params }: LoaderContext) {
+  const posts = await db.getPosts();
+  return { posts };
+}
+
+export default function BlogPage({ data }: PageProps) {
+  const { posts } = data as { posts: Post[] };
+  const [filter, setFilter] = useState("");
+
+  const filteredPosts = posts.filter((p) =>
+    p.title.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  return (
+    <div>
+      <input
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Search posts..."
+      />
+      {filteredPosts.map((post) => (
+        <article key={post.id}>
+          <h2>{post.title}</h2>
+        </article>
+      ))}
     </div>
   );
 }

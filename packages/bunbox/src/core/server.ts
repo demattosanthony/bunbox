@@ -3,9 +3,17 @@
  */
 
 import { join } from "path";
-import type { ResolvedBunboxConfig, ResolvedCorsConfig, ResolvedOpenAPIConfig } from "./config";
-import { createOpenAPIHandler, createSwaggerUIHandler } from "./openapi/runtime";
-import { getRequestUrl, matchRoute, sortRoutes, toBunRoutePath } from "./router";
+import type { ResolvedBunboxConfig, ResolvedCorsConfig } from "./config";
+import {
+  createOpenAPIHandler,
+  createSwaggerUIHandler,
+} from "./openapi/runtime";
+import {
+  getRequestUrl,
+  matchRoute,
+  sortRoutes,
+  toBunRoutePath,
+} from "./router";
 import {
   scanPageRoutes,
   scanApiRoutes,
@@ -16,10 +24,14 @@ import {
   scanJobs,
 } from "./scanner";
 import { jobManager } from "./jobs";
-import { renderPage, generateHTMLShell, checkUseServer } from "./ssr";
+import { renderPage } from "./ssr";
 import { generateRoutesFile, generateApiClient } from "./generator";
 import { createWatcher } from "./watcher";
-import { hasBuildArtifacts, getBuildMetadata } from "./build";
+import {
+  hasBuildArtifacts,
+  getBuildMetadata,
+  type BuildMetadata,
+} from "./build";
 import {
   resolveAbsolutePath,
   dynamicImport,
@@ -28,14 +40,14 @@ import {
   getFaviconContentType,
   getErrorMessage,
   loadBunPlugins,
+  registerAssetPlugin,
 } from "./utils";
-import { getApplicableLayoutPaths } from "./shared.tsx";
+import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
 import type { BunFile, Server } from "bun";
 import type {
   Route,
   BunboxRequest,
-  ApiRouteModule,
   RouteHandler,
   RouteHandlers,
   WsRouteModule,
@@ -175,7 +187,6 @@ class BunboxServer {
   private wsHandlers: Map<string, WsRouteModule> = new Map();
   private socketHandlers: Map<string, SocketRouteModule> = new Map();
   private socketUsers: Map<string, Map<string, SocketUser>> = new Map(); // topic -> userId -> user
-  private serverSidePages: Set<string> = new Set(); // Pages with "use server" directive
   private rootLayoutPath: string | null = null;
   private cachedMetadata: PageMetadata | null = null;
   private hmrClients: Set<ServerWebSocket> = new Set();
@@ -184,6 +195,7 @@ class BunboxServer {
   private workerPath: string | null = null;
   private workerInstance: WorkerCleanup | void | null = null;
   private jobFiles: string[] = [];
+  private buildMetadata: BuildMetadata | null = null;
 
   constructor(config: ResolvedBunboxConfig) {
     this.config = config;
@@ -195,6 +207,10 @@ class BunboxServer {
    */
   async init(): Promise<{ isWorkerOnly: boolean; readyMessage: string }> {
     const startTime = Date.now();
+
+    // Register asset plugin for runtime imports (SSR)
+    // Must be called before any page/layout modules are imported
+    registerAssetPlugin();
 
     // Scan for worker file first
     this.workerPath = await scanWorker(this.config.appDir);
@@ -229,10 +245,10 @@ class BunboxServer {
         !this.config.development && (await hasBuildArtifacts());
 
       if (useBuildArtifacts) {
-        const metadata = await getBuildMetadata();
-        if (metadata) {
+        this.buildMetadata = await getBuildMetadata();
+        if (this.buildMetadata) {
           console.log(
-            ` ○ Using pre-built artifacts (${metadata.routes.pages} pages, ${metadata.routes.apis} APIs)`
+            ` ○ Using pre-built artifacts (${this.buildMetadata.routes.pages} pages, ${this.buildMetadata.routes.apis} APIs)`
           );
         }
       } else {
@@ -242,9 +258,6 @@ class BunboxServer {
         // Generate typed API client
         await generateApiClient(this.config.appDir, this.config);
       }
-
-      // Detect which pages have "use server" directive for SSR
-      await this.detectServerSidePages();
 
       // Load WebSocket handlers in production
       if (!this.config.development) {
@@ -307,22 +320,6 @@ class BunboxServer {
   }
 
   /**
-   * Detect which pages have "use server" directive for SSR
-   */
-  private async detectServerSidePages() {
-    for (const route of this.pageRoutes) {
-      const pagePath = join(this.config.appDir, route.filepath);
-      try {
-        if (await checkUseServer(pagePath)) {
-          this.serverSidePages.add(route.filepath);
-        }
-      } catch {
-        // Silently continue - page might not exist
-      }
-    }
-  }
-
-  /**
    * Start worker process
    */
   private async startWorker() {
@@ -364,6 +361,14 @@ class BunboxServer {
       this.workerInstance = null;
     }
   }
+
+  /**
+   * Get the current build metadata (for HTML generation with hashed URLs)
+   */
+  public getBuildMetadata(): BuildMetadata | null {
+    return this.buildMetadata;
+  }
+
   /**
    * Handle file changes in development mode
    */
@@ -553,6 +558,26 @@ class BunboxServer {
   }
 
   /**
+   * Build a hashed asset route handler for production
+   * Serves pre-built file with 1-year immutable cache
+   */
+  private buildHashedAssetRoute(
+    filename: string,
+    contentType: string
+  ): RouteHandlers {
+    const filePath = join(process.cwd(), ".bunbox", filename);
+    return {
+      GET: () =>
+        new Response(Bun.file(filePath), {
+          headers: {
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        }),
+    };
+  }
+
+  /**
    * Build favicon route
    */
   private buildFaviconRoute(): RouteHandlers {
@@ -666,12 +691,30 @@ class BunboxServer {
    */
   private async buildRoutes(): Promise<Record<string, RouteHandlers>> {
     const routes: Record<string, RouteHandlers> = {
-      // Bunbox internal routes
-      "/__bunbox/client.js": this.buildClientRoute(),
-      "/__bunbox/styles.css": this.buildStylesRoute(),
+      // Bunbox internal routes (dev uses fixed names, prod uses hashed)
       "/__bunbox/favicon": this.buildFaviconRoute(),
       "/__bunbox/assets/:filename": this.buildAssetsRoute(),
     };
+
+    // In production with build metadata, register hashed routes
+    if (!this.config.development && this.buildMetadata) {
+      const { clientHash, stylesHash } = this.buildMetadata;
+      if (clientHash) {
+        routes[`/__bunbox/client.${clientHash}.js`] =
+          this.buildHashedAssetRoute(
+            `client.${clientHash}.js`,
+            "application/javascript"
+          );
+      }
+      if (stylesHash) {
+        routes[`/__bunbox/styles.${stylesHash}.css`] =
+          this.buildHashedAssetRoute(`styles.${stylesHash}.css`, "text/css");
+      }
+    } else {
+      // Development mode: use fixed names with no-cache
+      routes["/__bunbox/client.js"] = this.buildClientRoute();
+      routes["/__bunbox/styles.css"] = this.buildStylesRoute();
+    }
 
     // Add OpenAPI documentation routes if enabled
     if (this.config.openapi?.enabled) {
@@ -680,12 +723,16 @@ class BunboxServer {
 
       // Swagger UI endpoint
       routes[basePath] = {
-        GET: this.wrapWithCors(createSwaggerUIHandler(specPath, this.config.openapi)),
+        GET: this.wrapWithCors(
+          createSwaggerUIHandler(specPath, this.config.openapi)
+        ),
       };
 
       // OpenAPI JSON spec endpoint
       routes[specPath] = {
-        GET: this.wrapWithCors(createOpenAPIHandler(this.config.appDir, this.config.openapi)),
+        GET: this.wrapWithCors(
+          createOpenAPIHandler(this.config.appDir, this.config.openapi)
+        ),
       };
     }
 
@@ -738,15 +785,18 @@ class BunboxServer {
       }
     }
 
-    // Build SSR page routes (only pages with "use server" directive)
+    // Build SSR page routes (all pages are SSR'd)
     for (const route of this.pageRoutes) {
-      if (this.serverSidePages.has(route.filepath)) {
-        const routePath = toBunRoutePath(route);
-        routes[routePath] = {
-          GET: (req: Request) => this.handlePageRequest(req, route),
-        };
-      }
+      const routePath = toBunRoutePath(route);
+      routes[routePath] = {
+        GET: (req: Request) => this.handlePageRequest(req, route),
+      };
     }
+
+    // Add loader endpoint for client-side navigation
+    routes["/__bunbox/loader"] = {
+      POST: async (req: Request) => this.handleLoaderRequest(req),
+    };
 
     return routes;
   }
@@ -836,7 +886,7 @@ class BunboxServer {
   }
 
   /**
-   * Handle SSR page request (only for pages with "use server")
+   * Handle SSR page request
    */
   private async handlePageRequest(
     req: Request,
@@ -855,6 +905,15 @@ class BunboxServer {
         absolutePagePath,
         this.config.development
       );
+
+      // Execute loader if present
+      let loaderData: unknown = undefined;
+      if (typeof pageModule.loader === "function") {
+        loaderData = await pageModule.loader({
+          params: match.params,
+          query: match.query,
+        });
+      }
 
       // Find applicable layouts using shared utility
       const layoutModules: LayoutModule[] = [];
@@ -880,7 +939,14 @@ class BunboxServer {
         match.params,
         match.query,
         this.config.development,
-        urlPath
+        urlPath,
+        this.buildMetadata
+          ? {
+              clientHash: this.buildMetadata.clientHash,
+              stylesHash: this.buildMetadata.stylesHash,
+            }
+          : undefined,
+        loaderData
       );
 
       return new Response(stream, {
@@ -890,6 +956,54 @@ class BunboxServer {
       const message = getErrorMessage(error);
       console.error(`Page route error: ${message}`);
       return new Response(`Error rendering page: ${message}`, { status: 500 });
+    }
+  }
+
+  /**
+   * Handle loader request for client-side navigation
+   */
+  private async handleLoaderRequest(req: Request): Promise<Response> {
+    try {
+      const body = await req.json() as {
+        pathname: string;
+        params: Record<string, string>;
+        query: Record<string, string>;
+      };
+
+      // Find matching page route
+      const route = this.pageRoutes.find((r) => {
+        // Convert route pattern to check against pathname
+        const routePath = toBunRoutePath(r);
+        // Simple pattern matching - convert [param] to regex
+        const pattern = routePath.replace(/:([^/]+)/g, "[^/]+");
+        const regex = new RegExp(`^${pattern}$`);
+        return regex.test(body.pathname);
+      });
+
+      if (!route) {
+        return Response.json({ data: null });
+      }
+
+      const pagePath = join(this.config.appDir, route.filepath);
+      const absolutePagePath = resolveAbsolutePath(pagePath);
+      const pageModule = await dynamicImport<PageModule>(
+        absolutePagePath,
+        this.config.development
+      );
+
+      if (typeof pageModule.loader !== "function") {
+        return Response.json({ data: null });
+      }
+
+      const data = await pageModule.loader({
+        params: body.params,
+        query: body.query,
+      });
+
+      return Response.json({ data });
+    } catch (error) {
+      console.error(`Loader error: ${getErrorMessage(error)}`);
+      return Response.json({ data: null, error: getErrorMessage(error) }, { status: 500 });
     }
   }
 
@@ -956,17 +1070,10 @@ class BunboxServer {
           }
         }
 
-        // Serve HTML shell for client-side rendered pages
-        // The client router will handle routing and 404s
-        const html = generateHTMLShell(
-          {},
-          Object.fromEntries(url.searchParams),
-          this.cachedMetadata || {},
-          this.config.development
-        );
-
-        return new Response(html, {
-          headers: { "Content-Type": "text/html" },
+        // No matching route found - return 404
+        return new Response("Not Found", {
+          status: 404,
+          headers: { "Content-Type": "text/plain" },
         });
       },
     };

@@ -15,9 +15,13 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "cd examples/basic && bun run dev",
-    "start": "cd examples/basic && bun run start",
+    "dev:basic": " cd examples/basic && bun run dev",
+    "dev:www": "bun run --filter @bunbox/www dev",
     "typecheck": "bun run --filter '*' typecheck"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.2",

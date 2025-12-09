@@ -9,7 +9,7 @@ Bunbox is a full-stack web framework built on [Bun](https://bun.sh):
 - **File-based routing** for pages, APIs, and WebSockets
 - **Type-safe APIs** with auto-generated typed client
 - **Real-time WebSockets** with typed protocols and React hooks
-- **Server-side rendering** with React
+- **Server-side rendering** with full client hydration
 - **Background jobs** with cron scheduling
 - **Zero config** - works out of the box
 
@@ -41,4 +41,5 @@ Bunbox combines patterns from Next.js (file-based routing), tRPC (end-to-end typ
 
 ## Next Steps
 
-Check out the [Installation](/docs/installation) guide to set up your first project.
+- [Installation](/docs/installation) - Set up your first project
+- [Rendering](/docs/rendering) - Understand how SSR and hydration work

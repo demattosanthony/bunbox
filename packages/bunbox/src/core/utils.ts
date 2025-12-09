@@ -72,64 +72,88 @@ const ASSET_EXTENSIONS = [
 ];
 
 /**
- * Generate a hash for a file path to create unique asset names
+ * Generate an 8-character MD5 hash from any input
+ * Used for asset filenames and cache busting
  */
-function generateAssetHash(filePath: string): string {
+export function generateHash(input: string | Uint8Array): string {
   const hash = createHash("md5");
-  hash.update(filePath);
+  hash.update(input);
   return hash.digest("hex").slice(0, 8);
 }
 
 /**
+ * Regex pattern for matching asset file extensions
+ */
+const assetPattern = new RegExp(`\\.(${ASSET_EXTENSIONS.join("|")})$`, "i");
+
+/**
+ * Process an asset file: copy to .bunbox/assets with hashed filename
+ * Returns the public URL or undefined if processing fails
+ */
+async function processAssetFile(
+  filePath: string
+): Promise<{ publicUrl: string; contents: string } | undefined> {
+  const ext = filePath.split(".").pop()?.toLowerCase() || "";
+  if (!ASSET_EXTENSIONS.includes(ext)) return undefined;
+
+  const hash = generateHash(filePath);
+  const basename = filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || "asset";
+  const filename = `${basename}.${hash}.${ext}`;
+
+  const assetsDir = join(process.cwd(), ".bunbox", "assets");
+  await mkdir(assetsDir, { recursive: true });
+
+  const destPath = join(assetsDir, filename);
+  try {
+    await copyFile(filePath, destPath);
+  } catch (error) {
+    console.error(`Failed to copy asset ${filePath}:`, error);
+    return undefined;
+  }
+
+  const publicUrl = `/__bunbox/assets/${filename}`;
+  return { publicUrl, contents: `export default "${publicUrl}";` };
+}
+
+/**
  * Create a plugin to handle asset imports (images, fonts, etc.)
+ * Used for Bun.build() (client bundling)
  */
 function createAssetLoaderPlugin(): BunPlugin {
-  // Create asset pattern
-  const assetPattern = new RegExp(`\\.(${ASSET_EXTENSIONS.join("|")})$`, "i");
-
   return {
     name: "bunbox-asset-loader",
     setup(build) {
       build.onLoad({ filter: assetPattern }, async (args) => {
-        const filePath = args.path;
-        const ext = filePath.split(".").pop()?.toLowerCase() || "";
-
-        if (!ASSET_EXTENSIONS.includes(ext)) {
-          return undefined;
-        }
-
-        // Generate unique filename with hash
-        const hash = generateAssetHash(filePath);
-        const basename =
-          filePath
-            .split("/")
-            .pop()
-            ?.replace(/\.[^.]+$/, "") || "asset";
-        const filename = `${basename}.${hash}.${ext}`;
-
-        // Ensure assets directory exists
-        const assetsDir = join(process.cwd(), ".bunbox", "assets");
-        await mkdir(assetsDir, { recursive: true });
-
-        // Copy asset to public directory
-        const destPath = join(assetsDir, filename);
-        try {
-          await copyFile(filePath, destPath);
-        } catch (error) {
-          console.error(`Failed to copy asset ${filePath}:`, error);
-          return undefined;
-        }
-
-        // Return a module that exports the public URL
-        const publicUrl = `/__bunbox/assets/${filename}`;
-
-        return {
-          contents: `export default "${publicUrl}";`,
-          loader: "js",
-        };
+        const result = await processAssetFile(args.path);
+        return result ? { contents: result.contents, loader: "js" } : undefined;
       });
     },
   };
+}
+
+/**
+ * Track whether runtime asset plugin has been registered
+ */
+let assetPluginRegistered = false;
+
+/**
+ * Register the asset loader plugin at runtime for server-side imports
+ * This ensures SSR renders the same asset URLs as the client bundle
+ * Must be called before any page/layout modules are imported
+ */
+export function registerAssetPlugin(): void {
+  if (assetPluginRegistered) return;
+  assetPluginRegistered = true;
+
+  Bun.plugin({
+    name: "bunbox-asset-loader-runtime",
+    setup(build) {
+      build.onLoad({ filter: assetPattern }, async (args) => {
+        const result = await processAssetFile(args.path);
+        return result ? { contents: result.contents, loader: "js" } : undefined;
+      });
+    },
+  });
 }
 
 /**

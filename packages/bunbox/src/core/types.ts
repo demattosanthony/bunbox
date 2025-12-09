@@ -89,17 +89,6 @@ export type BunboxRequest = Omit<Request, "body"> & {
  */
 export type RouteHandler = (req: BunboxRequest) => Response | Promise<Response>;
 
-/**
- * API route module with HTTP method handlers
- */
-export interface ApiRouteModule {
-  GET?: RouteHandler;
-  POST?: RouteHandler;
-  PUT?: RouteHandler;
-  DELETE?: RouteHandler;
-  PATCH?: RouteHandler;
-}
-
 // Schema types removed - use Zod or other validation libraries directly
 
 /**
@@ -185,19 +174,29 @@ export type WebSocketData =
     };
 
 /**
- * Page component props with route params and query
+ * Page component props with route params, query, and loader data
  */
 export interface PageProps {
+  params: Record<string, string>;
+  query: Record<string, string>;
+  data?: unknown;
+}
+
+/**
+ * Context passed to page loader functions
+ */
+export interface LoaderContext {
   params: Record<string, string>;
   query: Record<string, string>;
 }
 
 /**
- * Page module with React component
+ * Page module with React component and optional loader
  */
 export interface PageModule {
   default: React.ComponentType<PageProps>;
   metadata?: PageMetadata;
+  loader?: (context: LoaderContext) => unknown | Promise<unknown>;
 }
 
 /**

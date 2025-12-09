@@ -74,4 +74,4 @@ export default defineConfig({
 
 - Learn about [routing](/docs/routing) and file-based navigation
 - Create your first [API route](/docs/api-routes)
-- Explore [Server Components](/docs/server-components)
+- Explore [Data Loading](/docs/data-loading)

@@ -60,8 +60,6 @@ export const ChatProtocol = defineProtocol({
 Use the `useSocket` hook to connect to your socket:
 
 ```tsx
-"use client";
-
 import { useSocket } from "@ademattos/bunbox/client";
 import { ChatProtocol } from "@/app/sockets/chat/protocol";
 
@@ -222,8 +220,6 @@ export const ChatProtocol = defineProtocol({
 
 ```tsx
 // app/chat/page.tsx
-"use client";
-
 import { useState, useEffect } from "react";
 import { useSocket } from "@ademattos/bunbox/client";
 import { ChatProtocol } from "@/app/sockets/chat/protocol";

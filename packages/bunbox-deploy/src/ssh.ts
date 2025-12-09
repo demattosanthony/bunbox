@@ -2,7 +2,7 @@
  * SSH client wrapper using ssh2
  */
 
-import { Client, type ConnectConfig } from "ssh2";
+import { Client, type ConnectConfig, type ClientChannel } from "ssh2";
 import { readFileSync } from "fs";
 import type { ResolvedTarget } from "./config";
 
@@ -151,7 +151,7 @@ export class SSHClient {
           this.connected = true;
           resolve();
         })
-        .on("error", (err) => {
+        .on("error", (err: Error) => {
           reject(new Error(`SSH connection failed: ${err.message}`));
         })
         .connect(config);
@@ -305,7 +305,7 @@ export class SSHClient {
       : `bash -c '${pathExtend}${command}'`;
 
     return new Promise((resolve, reject) => {
-      this.conn.exec(cmd, (err, stream) => {
+      this.conn.exec(cmd, (err: Error | undefined, stream: ClientChannel) => {
         if (err) return reject(err);
 
         let stdout = "";
@@ -364,7 +364,7 @@ export class SSHClient {
    */
   async shell(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.conn.shell((err, stream) => {
+      this.conn.shell((err: Error | undefined, stream: ClientChannel) => {
         if (err) return reject(err);
 
         stream.on("close", () => {

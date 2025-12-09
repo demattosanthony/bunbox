@@ -56,8 +56,6 @@ export const getUpdates = route.get().handle((): SSEResponse<Update> => {
 Use the `useStream` hook from the auto-generated API client:
 
 ```tsx
-"use client";
-
 import { api } from "@/.bunbox/api-client";
 
 export default function StreamPage() {

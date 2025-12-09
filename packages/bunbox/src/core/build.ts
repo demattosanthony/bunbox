@@ -14,7 +14,13 @@ import {
   scanWorker,
 } from "./scanner";
 import { generateRoutesFile, generateApiClient } from "./generator";
-import { fileExists, transpileForBrowser, getErrorMessage } from "./utils";
+import {
+  fileExists,
+  transpileForBrowser,
+  getErrorMessage,
+  generateHash,
+  loadBunPlugins,
+} from "./utils";
 
 /**
  * Build metadata stored in .bunbox/.built
@@ -29,6 +35,8 @@ export interface BuildMetadata {
     layouts: number;
   };
   bundleSize: number;
+  clientHash: string;
+  stylesHash: string;
 }
 
 /**
@@ -65,6 +73,17 @@ export async function buildForProduction(
   const bunboxDir = join(process.cwd(), ".bunbox");
   await mkdir(bunboxDir, { recursive: true });
 
+  // Clean up old hashed files before build
+  const oldClientFiles = await Array.fromAsync(
+    new Bun.Glob("client.*.js").scan(bunboxDir)
+  );
+  const oldStylesFiles = await Array.fromAsync(
+    new Bun.Glob("styles.*.css").scan(bunboxDir)
+  );
+  for (const file of [...oldClientFiles, ...oldStylesFiles]) {
+    await Bun.file(join(bunboxDir, file)).delete().catch(() => {});
+  }
+
   // Generate route files
   console.log(" ○ Generating route files...");
   await generateRoutesFile(config.appDir);
@@ -95,13 +114,40 @@ export async function buildForProduction(
     process.exit(1);
   }
 
-  // Write bundled client.js
-  const clientJsPath = join(bunboxDir, "client.js");
+  // Generate content hash and write hashed client bundle
+  const clientHash = generateHash(buildResult.output);
+  const clientJsPath = join(bunboxDir, `client.${clientHash}.js`);
   await Bun.write(clientJsPath, buildResult.output);
 
   const bundleSize = new TextEncoder().encode(buildResult.output).length;
   const bundleSizeKB = (bundleSize / 1024).toFixed(2);
-  console.log(` ✓ Built client.js (${bundleSizeKB} KB)`);
+  console.log(` ✓ Built client.${clientHash}.js (${bundleSizeKB} KB)`);
+
+  // Build and hash CSS
+  console.log(" ○ Building styles...");
+  const cssPath = join(config.appDir, "index.css");
+  let stylesHash = "";
+
+  if (await fileExists(cssPath)) {
+    const plugins = await loadBunPlugins();
+    const cssResult = await Bun.build({
+      entrypoints: [cssPath],
+      minify: true,
+      plugins: plugins.length ? plugins : undefined,
+    });
+
+    if (cssResult.success && cssResult.outputs[0]) {
+      const processedCss = await cssResult.outputs[0].text();
+      stylesHash = generateHash(processedCss);
+      await Bun.write(join(bunboxDir, `styles.${stylesHash}.css`), processedCss);
+      const cssSizeKB = (processedCss.length / 1024).toFixed(2);
+      console.log(` ✓ Built styles.${stylesHash}.css (${cssSizeKB} KB)`);
+    } else {
+      console.warn(" ⚠ CSS build failed, styles will be processed at runtime");
+    }
+  } else {
+    console.log(" ○ No index.css found, skipping styles");
+  }
 
   // Write build metadata
   const metadata: BuildMetadata = {
@@ -114,6 +160,8 @@ export async function buildForProduction(
       layouts: layouts.size,
     },
     bundleSize,
+    clientHash,
+    stylesHash,
   };
 
   const metadataPath = join(bunboxDir, ".built");
@@ -158,10 +206,16 @@ export async function getBuildMetadata(): Promise<BuildMetadata | null> {
       typeof data.timestamp !== "number" ||
       typeof data.version !== "string" ||
       !data.routes ||
-      typeof data.bundleSize !== "number"
+      typeof data.bundleSize !== "number" ||
+      typeof data.clientHash !== "string"
     ) {
       console.warn("Invalid build metadata structure");
       return null;
+    }
+
+    // Ensure stylesHash exists (default to empty string for backwards compat)
+    if (typeof data.stylesHash !== "string") {
+      data.stylesHash = "";
     }
 
     return data as BuildMetadata;

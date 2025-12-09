@@ -1,5 +1,3 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 import { useRouter } from "@ademattos/bunbox/client";
 
@@ -17,6 +15,7 @@ const navigation: NavItem[] = [
       { title: "Introduction", href: "/docs/introduction" },
       { title: "Installation", href: "/docs/installation" },
       { title: "Quick Start", href: "/docs/quick-start" },
+      { title: "Rendering", href: "/docs/rendering" },
     ],
   },
   {
@@ -27,7 +26,7 @@ const navigation: NavItem[] = [
       { title: "Pages", href: "/docs/pages" },
       { title: "Layouts", href: "/docs/layouts" },
       { title: "Client-Side Routing", href: "/docs/client-routing" },
-      { title: "Server Components", href: "/docs/server-components" },
+      { title: "Data Loading", href: "/docs/data-loading" },
     ],
   },
   {
@@ -86,8 +85,8 @@ export function DocsSidebar() {
                       className={cn(
                         "block text-sm transition-colors py-1 px-2 rounded-md",
                         isActive
-                          ? "bg-primary/10 text-primary font-bold"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          ? "text-primary font-bold"
+                          : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       {item.title}

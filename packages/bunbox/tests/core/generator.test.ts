@@ -65,7 +65,6 @@ describe("generator", () => {
         expect(routesContent).toContain("export const routes = {");
         expect(routesContent).toContain('"/": Page0');
         expect(routesContent).toContain("export const layouts = {");
-        expect(routesContent).toContain("export const ssrPages = new Set([");
 
         // Read generated entry file
         const entryFile = Bun.file(entryPath);
@@ -73,7 +72,7 @@ describe("generator", () => {
 
         expect(entryContent).toContain("Auto-generated entry point");
         expect(entryContent).toContain("import { initBunbox }");
-        expect(entryContent).toContain("import { routes, layouts, ssrPages }");
+        expect(entryContent).toContain("import { routes, layouts }");
       } finally {
         process.chdir(originalCwd);
       }
@@ -173,8 +172,8 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
       }
     });
 
-    test("identifies SSR pages with 'use server' and excludes from client routes", async () => {
-      // Create SSR page
+    test("includes all pages in client bundle", async () => {
+      // Create page with "use server" directive (no longer treated differently)
       await writeFile(
         join(APP_DIR, "page.tsx"),
         `"use server";\nexport default function Home() { return <h1>Home</h1>; }`
@@ -189,83 +188,9 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
         const routesFile = Bun.file(join(BUNBOX_DIR, "routes.ts"));
         const routesContent = await routesFile.text();
 
-        // SSR pages should be in ssrPages set
-        expect(routesContent).toContain("export const ssrPages = new Set([");
-        expect(routesContent).toContain('  "/"');
-
-        // SSR pages should NOT be imported or included in routes export
-        // They are server-only and don't run on client
-        expect(routesContent).not.toContain("import Page0 from");
-        expect(routesContent).not.toContain('"/": Page');
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-
-    test("separates SSR and client pages correctly", async () => {
-      // Create mix of SSR and client pages
-      await writeFile(
-        join(APP_DIR, "page.tsx"),
-        `export default function Home() { return <h1>Home</h1>; }`
-      );
-      await mkdir(join(APP_DIR, "ssr-page"), { recursive: true });
-      await writeFile(
-        join(APP_DIR, "ssr-page", "page.tsx"),
-        `"use server";\nexport default function SSRPage() { return <h1>SSR</h1>; }`
-      );
-      await mkdir(join(APP_DIR, "client-page"), { recursive: true });
-      await writeFile(
-        join(APP_DIR, "client-page", "page.tsx"),
-        `export default function ClientPage() { return <h1>Client</h1>; }`
-      );
-
-      const originalCwd = process.cwd();
-      process.chdir(TEST_DIR);
-
-      try {
-        await generateRoutesFile(APP_DIR);
-
-        const routesFile = Bun.file(join(BUNBOX_DIR, "routes.ts"));
-        const routesContent = await routesFile.text();
-
-        // Client pages should be in routes
-        expect(routesContent).toContain('"/": Page');
-        expect(routesContent).toContain('"/client-page": Page');
-
-        // SSR page should NOT be in routes (server-only)
-        expect(routesContent).not.toContain('"/ssr-page": Page');
-
-        // SSR page should be in ssrPages set
-        expect(routesContent).toContain('"/ssr-page"');
-        expect(routesContent).toContain("export const ssrPages = new Set([");
-      } finally {
-        process.chdir(originalCwd);
-      }
-    });
-
-    test("only SSR pages trigger full page loads", async () => {
-      // Create client page (default behavior)
-      await writeFile(
-        join(APP_DIR, "page.tsx"),
-        `export default function Home() { return <h1>Home</h1>; }`
-      );
-
-      const originalCwd = process.cwd();
-      process.chdir(TEST_DIR);
-
-      try {
-        await generateRoutesFile(APP_DIR);
-
-        const routesFile = Bun.file(join(BUNBOX_DIR, "routes.ts"));
-        const routesContent = await routesFile.text();
-
-        // Client pages should be in routes
+        // All pages should be imported and included in routes (SSR + client hydration)
         expect(routesContent).toContain("import Page0 from");
         expect(routesContent).toContain('"/": Page0');
-
-        // ssrPages should be empty for client-only pages
-        expect(routesContent).toContain("export const ssrPages = new Set([");
-        expect(routesContent).toContain("]);\n");
       } finally {
         process.chdir(originalCwd);
       }
@@ -284,7 +209,6 @@ export default function Layout({ children }: LayoutProps) { return <div>{childre
         // Should have empty structures
         expect(routesContent).toContain("export const routes = {");
         expect(routesContent).toContain("export const layouts = {");
-        expect(routesContent).toContain("export const ssrPages = new Set([");
       } finally {
         process.chdir(originalCwd);
       }

@@ -17,10 +17,13 @@ export interface Doc {
   content: string;
 }
 
+// Guard for browser environment - this module only works on the server
+const isBrowser = typeof window !== "undefined";
+
 // Use import.meta.dir which is Bun-specific and works in ESM
-const BASE_DIR = import.meta.dir.replace(/\/lib$/, "");
-const DOCS_PATH = join(BASE_DIR, "content", "docs");
-const BLOG_PATH = join(BASE_DIR, "content", "blog");
+const BASE_DIR = isBrowser ? "" : (import.meta.dir?.replace(/\/lib$/, "") ?? "");
+const DOCS_PATH = isBrowser ? "" : join(BASE_DIR, "content", "docs");
+const BLOG_PATH = isBrowser ? "" : join(BASE_DIR, "content", "blog");
 
 async function readMarkdownFile(filepath: string): Promise<Doc | null> {
   try {

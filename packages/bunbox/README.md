@@ -6,7 +6,7 @@ A full-stack TypeScript framework built on [Bun](https://bun.sh). File-based rou
 
 <h3>
 
-[Homepage](https://bunbox.anthonydemattos.com) | [Documentation](https://bunbox.anthonydemattos.com/docs/introduction)
+[Homepage](https://bunbox.org) | [Documentation](https://bunbox.org/docs/introduction)
 
 </h3>
 
@@ -91,8 +91,8 @@ import { api } from "@ademattos/bunbox/client";
 
 export default function Profile() {
   const { data } = api.user.getUser.useQuery({
-    id: "123",           // params are flattened
-    include: "email",    // query params are flattened too!
+    id: "123", // params are flattened
+    include: "email", // query params are flattened too!
   });
 
   return <div>{data?.email}</div>; // data is fully typed!

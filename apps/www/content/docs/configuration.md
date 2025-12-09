@@ -97,6 +97,75 @@ When enabled, serves:
 
 See [OpenAPI & Swagger](/docs/openapi) for full documentation.
 
+### cors
+
+Configure CORS (Cross-Origin Resource Sharing) for API routes.
+
+- Type: `boolean | CorsConfig`
+- Default: `undefined` (disabled)
+
+Enable with permissive defaults (allows all origins):
+
+```typescript
+export default defineConfig({
+  cors: true,
+});
+```
+
+Or configure specific options:
+
+```typescript
+export default defineConfig({
+  cors: {
+    origin: "https://example.com",        // Allowed origin(s)
+    methods: ["GET", "POST"],             // Allowed methods
+    allowedHeaders: ["Content-Type"],     // Allowed request headers
+    exposedHeaders: ["X-Custom-Header"],  // Headers exposed to browser
+    credentials: true,                    // Allow credentials
+    maxAge: 86400,                        // Preflight cache duration (seconds)
+  },
+});
+```
+
+#### CORS Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `origin` | `string \| string[] \| (origin: string) => boolean` | `"*"` | Allowed origins |
+| `methods` | `string[]` | `["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]` | Allowed HTTP methods |
+| `allowedHeaders` | `string[]` | `["Content-Type", "Authorization"]` | Headers the client can send |
+| `exposedHeaders` | `string[]` | `[]` | Headers exposed to the client |
+| `credentials` | `boolean` | `false` | Allow cookies/auth headers |
+| `maxAge` | `number` | `86400` | Preflight response cache time |
+
+#### Dynamic Origin Validation
+
+Use a function for dynamic origin validation:
+
+```typescript
+export default defineConfig({
+  cors: {
+    origin: (origin) => {
+      const allowed = ["https://app.example.com", "https://admin.example.com"];
+      return allowed.includes(origin);
+    },
+    credentials: true,
+  },
+});
+```
+
+#### Multiple Origins
+
+Allow specific origins:
+
+```typescript
+export default defineConfig({
+  cors: {
+    origin: ["https://app.example.com", "https://admin.example.com"],
+  },
+});
+```
+
 ## Environment Variables
 
 Use `.env` files for environment-specific configuration:

@@ -70,27 +70,28 @@ export function FeaturesGrid() {
             </p>
           </a>
 
-          {/* React SSR */}
+          {/* Data Loading */}
           <a
-            href="/docs/rendering"
+            href="/docs/data-loading"
             className="group rounded-3xl border border-border/60 bg-background p-6 cursor-pointer transition-all duration-300 hover:shadow-xl hover:shadow-pink-500/5 hover:border-pink-500/30 hover:-translate-y-1"
           >
             <div className="h-24 flex items-center justify-center mb-4">
-              <div className="flex gap-2">
-                <div className="px-2 py-1 rounded bg-pink-500/10 border border-pink-500/30 text-xs font-mono text-pink-500 group-hover:scale-105 transition-transform">
-                  "use server"
+              <div className="font-mono text-xs space-y-1">
+                <div className="text-muted-foreground">
+                  <span className="text-pink-500">export async function</span>{" "}
+                  <span className="text-foreground">loader</span>()
                 </div>
-                <div className="px-2 py-1 rounded bg-blue-500/10 border border-blue-500/30 text-xs font-mono text-blue-500 group-hover:scale-105 transition-transform">
-                  "use client"
+                <div className="text-muted-foreground/60 text-[10px] pl-2 group-hover:text-pink-500/70 transition-colors">
+                  → Server data → SSR + client
                 </div>
               </div>
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2 group-hover:text-pink-600 transition-colors">
-              React Server Components
+              Server Data Loading
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Server and client components, streaming SSR, Suspense—all just
-              work.
+              Loaders run on the server, data flows to pages. SSR and client
+              navigation just work.
             </p>
           </a>
 

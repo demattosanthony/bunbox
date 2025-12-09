@@ -1,5 +1,6 @@
 import React from "react";
 import type { PageMetadata } from "@ademattos/bunbox";
+import { ThemeProvider } from "@ademattos/bunbox/theme";
 import { Navigation } from "@/components/navigation";
 import { Footer } from "@/components/footer";
 import "./index.css";
@@ -27,33 +28,13 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const themeScript = `
-    (function() {
-      try {
-        var savedTheme = localStorage.getItem("bunbox-ui-theme");
-        var systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        var theme = savedTheme || "system";
-        
-        var root = document.documentElement;
-        root.classList.remove("light", "dark");
-        
-        if (theme === "system") {
-          root.classList.add(systemTheme);
-        } else {
-          root.classList.add(theme);
-        }
-      } catch (e) {}
-    })();
-  `;
-
   return (
-    <>
-      <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+    <ThemeProvider>
       <div className="flex min-h-screen flex-col">
         <Navigation />
         <main className="flex-1 pt-16">{children}</main>
         <Footer />
       </div>
-    </>
+    </ThemeProvider>
   );
 }
