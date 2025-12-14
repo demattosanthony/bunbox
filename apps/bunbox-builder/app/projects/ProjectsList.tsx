@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { FolderOpen, Trash2, ExternalLink, Sparkles } from "lucide-react";
 import type { Project } from "@/lib/db/schema";
 
 interface ProjectsListProps {
@@ -23,62 +26,57 @@ export function ProjectsList({ initialProjects }: ProjectsListProps) {
 
   if (projects.length === 0) {
     return (
-      <div className="messages-empty">
-        <h2>No projects yet</h2>
-        <p>
-          Start a conversation to create your first bunbox app. Your projects
-          will appear here.
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center mb-6">
+          <FolderOpen className="w-8 h-8 text-muted-foreground" />
+        </div>
+        <h2 className="text-xl font-semibold mb-2">No projects yet</h2>
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          Start a conversation to create your first bunbox app.
         </p>
-        <div className="suggestions">
-          <a href="/" className="suggestion-chip">
+        <Button asChild>
+          <a href="/" className="gap-2">
+            <Sparkles className="w-4 h-4" />
             Start Building
           </a>
-        </div>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="projects-grid">
+    <div className="space-y-3">
       {projects.map((project) => (
-        <div key={project.id} className="project-card">
-          <h3>{project.name}</h3>
-          <p>{project.description || "No description"}</p>
-          <div className="meta">
-            <span>Path: {project.path}</span>
-            <span> · </span>
-            <span>Created: {new Date(project.created_at).toLocaleDateString()}</span>
-          </div>
-          <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
-            <a
-              href={`/project/${project.id}`}
-              style={{
-                padding: "6px 12px",
-                background: "var(--accent)",
-                color: "white",
-                borderRadius: "6px",
-                textDecoration: "none",
-                fontSize: "13px"
-              }}
-            >
-              View
-            </a>
-            <button
-              onClick={() => deleteProject(project.id)}
-              style={{
-                padding: "6px 12px",
-                background: "var(--bg-tertiary)",
-                color: "var(--text-secondary)",
-                border: "1px solid var(--border-color)",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "13px"
-              }}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
+        <Card key={project.id} className="group hover:border-foreground/20 transition-colors">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium truncate">{project.name}</h3>
+                <p className="text-sm text-muted-foreground mt-0.5 truncate">
+                  {project.description || "No description"}
+                </p>
+                <p className="text-xs text-muted-foreground/60 mt-2 font-mono">
+                  {project.path}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button variant="ghost" size="icon" asChild className="h-8 w-8">
+                  <a href={`/project/${project.id}`}>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => deleteProject(project.id)}
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );

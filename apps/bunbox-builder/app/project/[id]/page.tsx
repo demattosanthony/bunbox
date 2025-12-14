@@ -1,4 +1,7 @@
 import { getProject } from "@/lib/db";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, FolderOpen, Sparkles, FileCode, Terminal, ArrowLeft } from "lucide-react";
 import type { Project } from "@/lib/db/schema";
 
 export async function loader({ params }: { params: { id: string } }) {
@@ -7,7 +10,6 @@ export async function loader({ params }: { params: { id: string } }) {
     throw new Error("Project not found");
   }
 
-  // List project files
   let files: string[] = [];
   try {
     const glob = new Bun.Glob("**/*");
@@ -22,89 +24,127 @@ export async function loader({ params }: { params: { id: string } }) {
 }
 
 export default function ProjectPage({
-  data
+  data,
 }: {
   data: { project: Project; files: string[] };
 }) {
   const { project, files } = data;
 
   return (
-    <div className="chat-container">
-      <header className="chat-header">
-        <h1>
-          <span className="logo"></span>
-          Bunbox Builder
-        </h1>
-        <nav className="nav-links">
-          <a href="/">New Chat</a>
-          <a href="/projects">Projects</a>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-background" />
+          </div>
+          <span className="font-semibold text-lg">Bunbox Builder</span>
+        </div>
+        <nav className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" asChild className="gap-2">
+            <a href="/">
+              <Plus className="w-4 h-4" />
+              New
+            </a>
+          </Button>
+          <Button variant="ghost" size="sm" asChild className="gap-2">
+            <a href="/projects">
+              <FolderOpen className="w-4 h-4" />
+              Projects
+            </a>
+          </Button>
         </nav>
       </header>
 
-      <div className="projects-container">
-        <div className="projects-header">
-          <h1>{project.name}</h1>
+      {/* Content */}
+      <main className="max-w-3xl mx-auto px-4 py-8">
+        <Button variant="ghost" size="sm" asChild className="gap-2 mb-6 -ml-2">
+          <a href="/projects">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Projects
+          </a>
+        </Button>
+
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+          <p className="text-muted-foreground mt-1">
+            {project.description || "No description"}
+          </p>
         </div>
 
-        <div className="project-card" style={{ marginBottom: "24px" }}>
-          <p>{project.description || "No description"}</p>
-          <div className="meta" style={{ marginTop: "12px" }}>
-            <div>Path: <code>{project.path}</code></div>
-            <div>Created: {new Date(project.created_at).toLocaleString()}</div>
-            <div>Updated: {new Date(project.updated_at).toLocaleString()}</div>
-          </div>
-        </div>
-
-        <h2 style={{ marginBottom: "16px", fontSize: "18px" }}>Project Files</h2>
-
-        {files.length === 0 ? (
-          <p style={{ color: "var(--text-secondary)" }}>No files yet</p>
-        ) : (
-          <div
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "8px",
-              padding: "16px"
-            }}
-          >
-            {files.map((file) => (
-              <div
-                key={file}
-                style={{
-                  padding: "8px 0",
-                  borderBottom: "1px solid var(--border-color)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "13px"
-                }}
-              >
-                {file}
+        <div className="space-y-6">
+          {/* Project Info */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-medium">Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Path</span>
+                <code className="text-xs bg-secondary px-2 py-0.5 rounded">
+                  {project.path}
+                </code>
               </div>
-            ))}
-          </div>
-        )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Created</span>
+                <span>{new Date(project.created_at).toLocaleDateString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Updated</span>
+                <span>{new Date(project.updated_at).toLocaleDateString()}</span>
+              </div>
+            </CardContent>
+          </Card>
 
-        <div style={{ marginTop: "24px" }}>
-          <h3 style={{ marginBottom: "12px", fontSize: "16px" }}>
-            Run the project
-          </h3>
-          <pre
-            style={{
-              background: "var(--bg-secondary)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "8px",
-              padding: "16px",
-              fontFamily: "var(--font-mono)",
-              fontSize: "13px",
-              overflow: "auto"
-            }}
-          >
-            cd {project.path}
-            {"\n"}bun install
-            {"\n"}bun run dev
-          </pre>
+          {/* Files */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <FileCode className="w-4 h-4" />
+                Files ({files.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {files.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No files yet</p>
+              ) : (
+                <div className="space-y-1">
+                  {files.slice(0, 20).map((file) => (
+                    <div
+                      key={file}
+                      className="text-sm font-mono text-muted-foreground py-1 px-2 rounded hover:bg-secondary transition-colors"
+                    >
+                      {file}
+                    </div>
+                  ))}
+                  {files.length > 20 && (
+                    <p className="text-xs text-muted-foreground pt-2">
+                      + {files.length - 20} more files
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Run Instructions */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <Terminal className="w-4 h-4" />
+                Run the Project
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <pre className="text-sm bg-secondary rounded-lg p-4 overflow-x-auto">
+                <code className="text-foreground">
+                  {`cd ${project.path}\nbun install\nbun run dev`}
+                </code>
+              </pre>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

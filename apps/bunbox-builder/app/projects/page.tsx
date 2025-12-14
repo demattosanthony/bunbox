@@ -1,9 +1,11 @@
 import { listProjects } from "@/lib/db";
 import { ProjectsList } from "./ProjectsList";
+import { Button } from "@/components/ui/button";
+import { Plus, FolderOpen, Sparkles } from "lucide-react";
 
 export const metadata = {
   title: "Projects - Bunbox Builder",
-  description: "Your created bunbox projects"
+  description: "Your created bunbox projects",
 };
 
 export async function loader() {
@@ -12,30 +14,47 @@ export async function loader() {
 }
 
 export default function ProjectsPage({
-  data
+  data,
 }: {
   data: Awaited<ReturnType<typeof loader>>;
 }) {
   return (
-    <div className="chat-container">
-      <header className="chat-header">
-        <h1>
-          <span className="logo"></span>
-          Bunbox Builder
-        </h1>
-        <nav className="nav-links">
-          <a href="/">New Chat</a>
-          <a href="/projects">Projects</a>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border/50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-background" />
+          </div>
+          <span className="font-semibold text-lg">Bunbox Builder</span>
+        </div>
+        <nav className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" asChild className="gap-2">
+            <a href="/">
+              <Plus className="w-4 h-4" />
+              New
+            </a>
+          </Button>
+          <Button variant="ghost" size="sm" asChild className="gap-2">
+            <a href="/projects">
+              <FolderOpen className="w-4 h-4" />
+              Projects
+            </a>
+          </Button>
         </nav>
       </header>
 
-      <div className="projects-container">
-        <div className="projects-header">
-          <h1>Your Projects</h1>
+      {/* Content */}
+      <main className="max-w-3xl mx-auto px-4 py-12">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
+          <p className="text-muted-foreground mt-1">
+            Your created bunbox applications
+          </p>
         </div>
 
         <ProjectsList initialProjects={data.projects} />
-      </div>
+      </main>
     </div>
   );
 }
