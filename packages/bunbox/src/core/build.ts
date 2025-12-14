@@ -20,7 +20,7 @@ import {
   getErrorMessage,
   generateHash,
   loadBunPlugins,
-  findCssFile,
+  findAllCssFiles,
 } from "./utils";
 
 /**
@@ -126,31 +126,49 @@ export async function buildForProduction(
 
   // Build and hash CSS
   console.log(" ○ Building styles...");
-  const rootLayoutPath = layouts.has("/")
-    ? join(config.appDir, layouts.get("/")!)
-    : undefined;
-  const cssPath = await findCssFile(config.appDir, rootLayoutPath);
+
+  // Gather all layout and page file paths to scan
+  const filesToScan: string[] = [];
+
+  // Add all layout files
+  for (const layoutPath of layouts.values()) {
+    filesToScan.push(join(config.appDir, layoutPath));
+  }
+
+  // Add all page files
+  for (const route of pageRoutes) {
+    filesToScan.push(join(config.appDir, route.filepath));
+  }
+
+  // Find all CSS files imported across layouts and pages
+  const cssFiles = await findAllCssFiles(filesToScan);
   let stylesHash = "";
 
-  if (cssPath) {
+  if (cssFiles.length > 0) {
     const plugins = await loadBunPlugins();
     const cssResult = await Bun.build({
-      entrypoints: [cssPath],
+      entrypoints: cssFiles,
       minify: true,
       plugins: plugins.length ? plugins : undefined,
     });
 
-    if (cssResult.success && cssResult.outputs[0]) {
-      const processedCss = await cssResult.outputs[0].text();
-      stylesHash = generateHash(processedCss);
-      await Bun.write(join(bunboxDir, `styles.${stylesHash}.css`), processedCss);
-      const cssSizeKB = (processedCss.length / 1024).toFixed(2);
-      console.log(` ✓ Built styles.${stylesHash}.css (${cssSizeKB} KB)`);
+    if (cssResult.success && cssResult.outputs.length > 0) {
+      // Combine all CSS outputs
+      const combinedCss = (
+        await Promise.all(cssResult.outputs.map((output) => output.text()))
+      ).join("\n");
+
+      stylesHash = generateHash(combinedCss);
+      await Bun.write(join(bunboxDir, `styles.${stylesHash}.css`), combinedCss);
+      const cssSizeKB = (combinedCss.length / 1024).toFixed(2);
+      console.log(
+        ` ✓ Built styles.${stylesHash}.css (${cssSizeKB} KB, ${cssFiles.length} files)`
+      );
     } else {
       console.warn(" ⚠ CSS build failed, styles will be processed at runtime");
     }
   } else {
-    console.log(" ○ No CSS file found, skipping styles");
+    console.log(" ○ No CSS files found, skipping styles");
   }
 
   // Write build metadata

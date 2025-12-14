@@ -348,47 +348,53 @@ export async function loadBunPlugins(): Promise<BunPlugin[]> {
 }
 
 /**
- * Find CSS file in app directory by parsing layout imports
- * First checks for CSS imports in the root layout file, then falls back to common names
- * Returns null if no CSS file is found
+ * Extract CSS imports from a file's content
+ * Matches: import "./styles.css", import '../parent.css', import("./app.css"), import from "./module.css"
  */
-export async function findCssFile(
-  appDir: string,
-  rootLayoutPath?: string
-): Promise<string | null> {
-  // If root layout path provided, try to parse CSS imports from it
-  if (rootLayoutPath && (await fileExists(rootLayoutPath))) {
+function extractCssImports(content: string): string[] {
+  // Match any string literal containing a relative CSS import (starts with . or ..)
+  const cssImportRegex = /["'](\.[^"']*\.css)["']/g;
+  const imports: string[] = [];
+  let match;
+
+  while ((match = cssImportRegex.exec(content)) !== null) {
+    if (match[1]) {
+      imports.push(match[1]);
+    }
+  }
+
+  return imports;
+}
+
+/**
+ * Find all CSS files imported across layouts and pages
+ * Scans provided files for CSS imports and returns unique list of absolute paths
+ */
+export async function findAllCssFiles(
+  filesToScan: string[]
+): Promise<string[]> {
+  const cssFiles = new Set<string>();
+
+  for (const filePath of filesToScan) {
+    if (!(await fileExists(filePath))) continue;
+
     try {
-      const layoutContent = await Bun.file(rootLayoutPath).text();
+      const content = await Bun.file(filePath).text();
+      const imports = extractCssImports(content);
 
-      // Match CSS imports: import "./styles.css" or import './index.css' or import("./app.css")
-      const cssImportRegex = /import\s+(?:["']|(?:\(["']))(\.\/[^"']+\.css)["']/g;
-      const matches = layoutContent.matchAll(cssImportRegex);
+      for (const importPath of imports) {
+        // Resolve relative to the file doing the import
+        const fileDir = join(filePath, "..");
+        const absoluteCssPath = resolve(fileDir, importPath);
 
-      for (const match of matches) {
-        if (match[1]) {
-          // Remove leading "./" and join with appDir
-          const cssFileName = match[1].replace(/^\.\//, "");
-          const cssPath = join(appDir, cssFileName);
-          if (await fileExists(cssPath)) {
-            return cssPath;
-          }
+        if (await fileExists(absoluteCssPath)) {
+          cssFiles.add(absoluteCssPath);
         }
       }
     } catch (error) {
-      // If parsing fails, fall through to common names check
+      // Skip files that can't be read
     }
   }
 
-  // Fallback: check common CSS file names in priority order
-  const commonNames = ["index.css", "styles.css", "global.css", "app.css"];
-
-  for (const name of commonNames) {
-    const cssPath = join(appDir, name);
-    if (await fileExists(cssPath)) {
-      return cssPath;
-    }
-  }
-
-  return null;
+  return Array.from(cssFiles);
 }
