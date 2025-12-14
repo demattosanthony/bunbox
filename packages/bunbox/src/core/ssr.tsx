@@ -4,8 +4,15 @@
 
 import React from "react";
 import { renderToReadableStream } from "react-dom/server";
-import type { PageMetadata, PageModule, LayoutModule } from "./types";
-import { getFaviconContentType } from "./utils";
+import type {
+  PageMetadata,
+  PageModule,
+  LayoutModule,
+  OpenGraphMetadata,
+  OpenGraphImage,
+  TwitterMetadata,
+} from "./types";
+import { getFaviconContentType, resolveMetadataUrl } from "./utils";
 
 /**
  * Build hashes for cache-busted asset URLs
@@ -54,6 +61,43 @@ const HMR_SCRIPT = `(function() {
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("bunbox-theme")||"system",d=document.documentElement,r=t==="system"?window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light":t;d.classList.add(r)}catch(e){}})();`;
 
 /**
+ * Deep merge Open Graph metadata with page taking precedence
+ */
+function mergeOpenGraph(
+  page: OpenGraphMetadata | undefined,
+  layout: OpenGraphMetadata | undefined
+): OpenGraphMetadata | undefined {
+  if (!page && !layout) return undefined;
+  return {
+    title: page?.title ?? layout?.title,
+    description: page?.description ?? layout?.description,
+    image: page?.image ?? layout?.image,
+    url: page?.url ?? layout?.url,
+    type: page?.type ?? layout?.type,
+    siteName: page?.siteName ?? layout?.siteName,
+    locale: page?.locale ?? layout?.locale,
+  };
+}
+
+/**
+ * Deep merge Twitter metadata with page taking precedence
+ */
+function mergeTwitter(
+  page: TwitterMetadata | undefined,
+  layout: TwitterMetadata | undefined
+): TwitterMetadata | undefined {
+  if (!page && !layout) return undefined;
+  return {
+    card: page?.card ?? layout?.card,
+    title: page?.title ?? layout?.title,
+    description: page?.description ?? layout?.description,
+    image: page?.image ?? layout?.image,
+    site: page?.site ?? layout?.site,
+    creator: page?.creator ?? layout?.creator,
+  };
+}
+
+/**
  * Merge metadata with page metadata taking precedence
  */
 function mergeMetadata(
@@ -70,7 +114,237 @@ function mergeMetadata(
     keywords: pageMetadata.keywords ?? layoutMetadata.keywords,
     author: pageMetadata.author ?? layoutMetadata.author,
     favicon: pageMetadata.favicon ?? layoutMetadata.favicon,
+    metadataBase: pageMetadata.metadataBase ?? layoutMetadata.metadataBase,
+    openGraph: mergeOpenGraph(pageMetadata.openGraph, layoutMetadata.openGraph),
+    twitter: mergeTwitter(pageMetadata.twitter, layoutMetadata.twitter),
   };
+}
+
+/**
+ * Render Open Graph meta tags
+ */
+function renderOpenGraphTags(
+  og: OpenGraphMetadata | undefined,
+  fallbackTitle: string,
+  fallbackDescription: string,
+  metadataBase: string | undefined,
+  pathname: string
+): React.ReactElement[] {
+  const tags: React.ReactElement[] = [];
+
+  // og:title - falls back to page title
+  const title = og?.title ?? fallbackTitle;
+  if (title) {
+    tags.push(
+      React.createElement("meta", {
+        key: "og:title",
+        property: "og:title",
+        content: title,
+      })
+    );
+  }
+
+  // og:description - falls back to page description
+  const description = og?.description ?? fallbackDescription;
+  if (description) {
+    tags.push(
+      React.createElement("meta", {
+        key: "og:description",
+        property: "og:description",
+        content: description,
+      })
+    );
+  }
+
+  // og:url - auto-generate from metadataBase + pathname if not set
+  const url = resolveMetadataUrl(og?.url ?? pathname, metadataBase);
+  if (url) {
+    tags.push(
+      React.createElement("meta", {
+        key: "og:url",
+        property: "og:url",
+        content: url,
+      })
+    );
+  }
+
+  // og:image with optional dimensions
+  if (og?.image) {
+    const imageData: OpenGraphImage =
+      typeof og.image === "string" ? { url: og.image } : og.image;
+    const imageUrl = resolveMetadataUrl(imageData.url, metadataBase);
+
+    if (imageUrl) {
+      tags.push(
+        React.createElement("meta", {
+          key: "og:image",
+          property: "og:image",
+          content: imageUrl,
+        })
+      );
+
+      if (imageData.width) {
+        tags.push(
+          React.createElement("meta", {
+            key: "og:image:width",
+            property: "og:image:width",
+            content: String(imageData.width),
+          })
+        );
+      }
+      if (imageData.height) {
+        tags.push(
+          React.createElement("meta", {
+            key: "og:image:height",
+            property: "og:image:height",
+            content: String(imageData.height),
+          })
+        );
+      }
+      if (imageData.alt) {
+        tags.push(
+          React.createElement("meta", {
+            key: "og:image:alt",
+            property: "og:image:alt",
+            content: imageData.alt,
+          })
+        );
+      }
+    }
+  }
+
+  // og:type - defaults to "website"
+  const type = og?.type ?? "website";
+  tags.push(
+    React.createElement("meta", {
+      key: "og:type",
+      property: "og:type",
+      content: type,
+    })
+  );
+
+  // og:site_name
+  if (og?.siteName) {
+    tags.push(
+      React.createElement("meta", {
+        key: "og:site_name",
+        property: "og:site_name",
+        content: og.siteName,
+      })
+    );
+  }
+
+  // og:locale
+  if (og?.locale) {
+    tags.push(
+      React.createElement("meta", {
+        key: "og:locale",
+        property: "og:locale",
+        content: og.locale,
+      })
+    );
+  }
+
+  return tags;
+}
+
+/**
+ * Render Twitter Card meta tags
+ */
+function renderTwitterTags(
+  twitter: TwitterMetadata | undefined,
+  og: OpenGraphMetadata | undefined,
+  fallbackTitle: string,
+  fallbackDescription: string,
+  metadataBase: string | undefined
+): React.ReactElement[] {
+  const tags: React.ReactElement[] = [];
+
+  // twitter:card - defaults to "summary_large_image"
+  const card = twitter?.card ?? "summary_large_image";
+  tags.push(
+    React.createElement("meta", {
+      key: "twitter:card",
+      name: "twitter:card",
+      content: card,
+    })
+  );
+
+  // twitter:title - falls back to og:title, then page title
+  const title = twitter?.title ?? og?.title ?? fallbackTitle;
+  if (title) {
+    tags.push(
+      React.createElement("meta", {
+        key: "twitter:title",
+        name: "twitter:title",
+        content: title,
+      })
+    );
+  }
+
+  // twitter:description - falls back to og:description, then page description
+  const description = twitter?.description ?? og?.description ?? fallbackDescription;
+  if (description) {
+    tags.push(
+      React.createElement("meta", {
+        key: "twitter:description",
+        name: "twitter:description",
+        content: description,
+      })
+    );
+  }
+
+  // twitter:image - falls back to og:image
+  const imageSource = twitter?.image ?? og?.image;
+  if (imageSource) {
+    const imageData =
+      typeof imageSource === "string" ? { url: imageSource } : imageSource;
+    const imageUrl = resolveMetadataUrl(imageData.url, metadataBase);
+
+    if (imageUrl) {
+      tags.push(
+        React.createElement("meta", {
+          key: "twitter:image",
+          name: "twitter:image",
+          content: imageUrl,
+        })
+      );
+
+      if ("alt" in imageData && imageData.alt) {
+        tags.push(
+          React.createElement("meta", {
+            key: "twitter:image:alt",
+            name: "twitter:image:alt",
+            content: imageData.alt,
+          })
+        );
+      }
+    }
+  }
+
+  // twitter:site
+  if (twitter?.site) {
+    tags.push(
+      React.createElement("meta", {
+        key: "twitter:site",
+        name: "twitter:site",
+        content: twitter.site,
+      })
+    );
+  }
+
+  // twitter:creator
+  if (twitter?.creator) {
+    tags.push(
+      React.createElement("meta", {
+        key: "twitter:creator",
+        name: "twitter:creator",
+        content: twitter.creator,
+      })
+    );
+  }
+
+  return tags;
 }
 
 /**
@@ -130,6 +404,22 @@ export async function renderPage(
 
   const assets = getAssetUrls(development, buildHashes);
 
+  // Generate Open Graph and Twitter Card meta tags
+  const ogTags = renderOpenGraphTags(
+    metadata.openGraph,
+    metadata.title ?? "",
+    metadata.description ?? "",
+    metadata.metadataBase,
+    pathname
+  );
+  const twitterTags = renderTwitterTags(
+    metadata.twitter,
+    metadata.openGraph,
+    metadata.title ?? "",
+    metadata.description ?? "",
+    metadata.metadataBase
+  );
+
   // Wrap in full HTML document structure for SSR (using React.createElement to avoid JSX)
   const fullDocument = React.createElement(
     "html",
@@ -160,6 +450,10 @@ export async function renderPage(
         React.createElement("meta", { name: "keywords", content: metadata.keywords.join(", ") }),
       metadata.author &&
         React.createElement("meta", { name: "author", content: metadata.author }),
+      // Open Graph meta tags
+      ...ogTags,
+      // Twitter Card meta tags
+      ...twitterTags,
       React.createElement("link", { rel: "stylesheet", href: assets.styles })
     ),
     React.createElement(

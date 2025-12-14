@@ -43,6 +43,56 @@ export type RouteContext<
   };
 
 /**
+ * Open Graph image with optional dimensions and alt text
+ */
+export interface OpenGraphImage {
+  url: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+}
+
+/**
+ * Open Graph metadata for social sharing
+ * @see https://ogp.me/
+ */
+export interface OpenGraphMetadata {
+  /** og:title - Falls back to page title */
+  title?: string;
+  /** og:description - Falls back to page description */
+  description?: string;
+  /** og:image - URL or image object with dimensions */
+  image?: string | OpenGraphImage;
+  /** og:url - Auto-generated from metadataBase + pathname if not set */
+  url?: string;
+  /** og:type - Defaults to "website" */
+  type?: "website" | "article" | "product" | "profile" | string;
+  /** og:site_name - Name of the overall site */
+  siteName?: string;
+  /** og:locale - e.g., "en_US" */
+  locale?: string;
+}
+
+/**
+ * Twitter Card metadata
+ * @see https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/markup
+ */
+export interface TwitterMetadata {
+  /** twitter:card type - Defaults to "summary_large_image" */
+  card?: "summary" | "summary_large_image" | "player" | "app";
+  /** twitter:title - Falls back to og:title, then page title */
+  title?: string;
+  /** twitter:description - Falls back to og:description, then page description */
+  description?: string;
+  /** twitter:image - Falls back to og:image */
+  image?: string | { url: string; alt?: string };
+  /** twitter:site - @username of the website */
+  site?: string;
+  /** twitter:creator - @username of content creator */
+  creator?: string;
+}
+
+/**
  * Page metadata for HTML head tags
  */
 export interface PageMetadata {
@@ -52,6 +102,12 @@ export interface PageMetadata {
   author?: string;
   viewport?: string;
   favicon?: string;
+  /** Base URL for resolving relative URLs in openGraph and twitter metadata */
+  metadataBase?: string;
+  /** Open Graph metadata for social sharing */
+  openGraph?: OpenGraphMetadata;
+  /** Twitter Card metadata */
+  twitter?: TwitterMetadata;
 }
 
 /**

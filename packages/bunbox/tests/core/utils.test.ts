@@ -11,6 +11,7 @@ import {
   resolveAbsolutePath,
   fileExists,
   getFaviconContentType,
+  resolveMetadataUrl,
 } from "../../src/core/utils";
 
 describe("getErrorMessage", () => {
@@ -145,5 +146,52 @@ describe("Path Traversal Protection", () => {
     const resolvedPath = resolve(outsidePath);
 
     expect(resolvedPath.startsWith(cwd + "/")).toBe(false);
+  });
+});
+
+describe("resolveMetadataUrl", () => {
+  test("returns undefined for undefined url", () => {
+    expect(resolveMetadataUrl(undefined, "https://example.com")).toBeUndefined();
+  });
+
+  test("returns absolute URLs unchanged", () => {
+    expect(resolveMetadataUrl("https://cdn.example.com/image.png", "https://example.com")).toBe(
+      "https://cdn.example.com/image.png"
+    );
+    expect(resolveMetadataUrl("http://cdn.example.com/image.png", "https://example.com")).toBe(
+      "http://cdn.example.com/image.png"
+    );
+  });
+
+  test("resolves paths starting with / against metadataBase", () => {
+    expect(resolveMetadataUrl("/og-image.png", "https://example.com")).toBe(
+      "https://example.com/og-image.png"
+    );
+    expect(resolveMetadataUrl("/blog/post-image.png", "https://example.com")).toBe(
+      "https://example.com/blog/post-image.png"
+    );
+  });
+
+  test("resolves relative paths (without /) against metadataBase", () => {
+    expect(resolveMetadataUrl("og-image.png", "https://example.com")).toBe(
+      "https://example.com/og-image.png"
+    );
+    expect(resolveMetadataUrl("images/og.png", "https://example.com")).toBe(
+      "https://example.com/images/og.png"
+    );
+  });
+
+  test("handles metadataBase with trailing slash", () => {
+    expect(resolveMetadataUrl("/og-image.png", "https://example.com/")).toBe(
+      "https://example.com/og-image.png"
+    );
+    expect(resolveMetadataUrl("og-image.png", "https://example.com/")).toBe(
+      "https://example.com/og-image.png"
+    );
+  });
+
+  test("returns undefined when metadataBase is not set and url is relative", () => {
+    expect(resolveMetadataUrl("/og-image.png", undefined)).toBeUndefined();
+    expect(resolveMetadataUrl("og-image.png", undefined)).toBeUndefined();
   });
 });

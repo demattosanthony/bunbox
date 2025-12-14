@@ -219,6 +219,24 @@ export function getFaviconContentType(filename: string): string {
   return FAVICON_TYPES[ext || ""] || "image/x-icon";
 }
 
+/**
+ * Resolve a URL to an absolute URL using a metadata base
+ * - If url is already absolute (http:// or https://), return as-is
+ * - If url is a path, prepend metadataBase
+ * - If metadataBase is not set, return undefined (can't resolve)
+ */
+export function resolveMetadataUrl(
+  url: string | undefined,
+  metadataBase: string | undefined
+): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (!metadataBase) return undefined;
+  const base = metadataBase.replace(/\/$/, "");
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${base}${path}`;
+}
+
 const requireFromApp = createRequire(join(process.cwd(), "package.json"));
 const REACT_SPECIFIERS = [
   "react",

@@ -21,6 +21,20 @@ export const metadata: PageMetadata = {
   ],
   author: "Anthony Demattos",
   favicon: "icon.svg",
+  metadataBase: "https://bunbox.org",
+  openGraph: {
+    siteName: "Bunbox",
+    locale: "en_US",
+    image: {
+      url: "/bunbox.png",
+      width: 1200,
+      height: 630,
+      alt: "Bunbox - A Simple Full-Stack Framework Built on Bun",
+    },
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({
