@@ -1,11 +1,15 @@
 ---
 title: Middleware
-description: Add middleware to your API routes
+description: Add middleware to your API routes and pages
 order: 11
 category: API Routes
 ---
 
-## Creating Middleware
+## API Middleware
+
+API middleware runs on your API routes using the `.use()` method.
+
+### Creating Middleware
 
 Create a middleware function:
 
@@ -25,7 +29,7 @@ export const getMessage = route
   });
 ```
 
-## Adding Context
+### Adding Context
 
 Middleware can add data to the context:
 
@@ -52,7 +56,7 @@ export const getCurrentUser = route
   });
 ```
 
-## Multiple Middleware
+### Multiple Middleware
 
 Chain multiple middleware:
 
@@ -78,7 +82,7 @@ export const getUserWithTiming = route
   });
 ```
 
-## Error Handling
+### Error Handling
 
 Middleware can throw errors:
 
@@ -99,32 +103,7 @@ export const deleteResource = route
   });
 ```
 
-## Async Middleware
-
-Middleware supports async operations:
-
-```typescript
-const loadUser = async (ctx) => {
-  const userId = ctx.params.id;
-  const user = await db.users.findById(userId);
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  return { user };
-};
-
-export const getUser = route
-  .get()
-  .use(loadUser)
-  .handle(async (ctx) => {
-    // ctx.user is loaded from database
-    return { user: ctx.user };
-  });
-```
-
-## Reusable Middleware
+### Reusable Middleware
 
 Create reusable middleware:
 
@@ -141,34 +120,11 @@ export const requireAuth = async (ctx) => {
   return { user };
 };
 
-// middleware/rateLimit.ts
-const requestCounts = new Map<string, { count: number; resetAt: number }>();
-
-export const rateLimit = async (ctx) => {
-  const ip = ctx.headers.get("x-forwarded-for") ?? "unknown";
-  const now = Date.now();
-  const limit = requestCounts.get(ip);
-
-  if (limit && now < limit.resetAt && limit.count >= 100) {
-    throw new Error("Rate limit exceeded");
-  }
-
-  requestCounts.set(ip, {
-    count: (limit?.count ?? 0) + 1,
-    resetAt: limit?.resetAt ?? now + 60000,
-  });
-};
-```
-
-Use in routes:
-
-```typescript
+// Use in routes
 import { requireAuth } from "@/middleware/auth";
-import { rateLimit } from "@/middleware/rateLimit";
 
 export const getProtectedUser = route
   .get()
-  .use(rateLimit)
   .use(requireAuth)
   .handle(async (ctx) => {
     return { user: ctx.user };
@@ -177,29 +133,161 @@ export const getProtectedUser = route
 
 > **Note:** For CORS configuration, use `bunbox.config.ts` instead of middleware. See [Configuration](/docs/configuration#cors) for details.
 
-## Conditional Middleware
+---
 
-Apply middleware conditionally:
+## Page Middleware
+
+Page middleware protects routes and handles authentication. Use `middleware.ts` files in your `app` directory.
+
+### Creating Middleware
+
+Create a `middleware.ts` file to protect routes:
 
 ```typescript
-const optionalAuth = async (ctx) => {
-  const token = ctx.headers.get("authorization");
+// app/middleware.ts
+import { redirect, getCookie } from "@ademattos/bunbox";
+import type { MiddlewareContext } from "@ademattos/bunbox";
 
-  if (token) {
-    const user = await verifyToken(token);
-    return { user };
+export async function middleware({ request }: MiddlewareContext) {
+  const authToken = getCookie(request, "auth_token");
+
+  if (!authToken) {
+    return redirect("/auth/login");
   }
 
-  return { user: null };
-};
-
-export const getGreeting = route
-  .get()
-  .use(optionalAuth)
-  .handle(async (ctx) => {
-    if (ctx.user) {
-      return { message: `Hello, ${ctx.user.name}` };
-    }
-    return { message: "Hello, guest" };
-  });
+  // Add user to context
+  return {
+    user: { id: "123", role: "user" },
+  };
+}
 ```
+
+This protects all routes. Unauthenticated users are redirected to `/auth/login`.
+
+### Accessing Context
+
+Middleware data flows to loaders and pages:
+
+```tsx
+import type { LoaderContext, PageProps } from "@ademattos/bunbox";
+
+export async function loader({ context }: LoaderContext) {
+  // Access middleware data
+  return {
+    user: context.user,
+  };
+}
+
+export default function Page({ data }: PageProps) {
+  const { user } = data as { user: User };
+  return <h1>Welcome, {user.name}</h1>;
+}
+```
+
+### Public Routes
+
+Override parent middleware for public routes:
+
+```typescript
+// app/auth/middleware.ts
+export async function middleware() {
+  // Return empty object to allow access
+  return {};
+}
+```
+
+This makes all `/auth` routes public, overriding the root middleware.
+
+### Role-Based Access
+
+Restrict routes by role:
+
+```typescript
+// app/admin/middleware.ts
+import { redirect } from "@ademattos/bunbox";
+import type { MiddlewareContext } from "@ademattos/bunbox";
+
+export async function middleware({ context }: MiddlewareContext) {
+  const user = context.user as { role: string };
+
+  if (user.role !== "admin") {
+    return redirect("/dashboard");
+  }
+
+  return { user };
+}
+```
+
+Only admin users can access `/admin` routes.
+
+### Cascading Middleware
+
+Middleware executes from child to parent:
+
+1. `app/admin/middleware.ts` (runs first)
+2. `app/middleware.ts` (runs if child returns undefined)
+
+This allows specific routes to override general protection.
+
+### Cookie Utilities
+
+Built-in helpers for auth:
+
+```typescript
+import { getCookie, setCookie, deleteCookie, redirect } from "@ademattos/bunbox";
+
+export async function middleware({ request }: MiddlewareContext) {
+  // Get cookie
+  const token = getCookie(request, "auth_token");
+
+  // Set cookie
+  const response = redirect("/dashboard");
+  setCookie(response, "session_id", "abc123", {
+    httpOnly: true,
+    secure: true,
+    maxAge: 3600,
+  });
+
+  return response;
+}
+```
+
+### Complete Example
+
+Authentication flow:
+
+```typescript
+// app/middleware.ts - Protect all routes
+import { redirect, getCookie } from "@ademattos/bunbox";
+
+export async function middleware({ request }) {
+  const token = getCookie(request, "auth_token");
+
+  if (!token) {
+    return redirect("/auth/login");
+  }
+
+  const user = await validateToken(token);
+  return { user };
+}
+```
+
+```typescript
+// app/auth/middleware.ts - Allow public access
+export async function middleware() {
+  return {};
+}
+```
+
+```typescript
+// app/admin/middleware.ts - Require admin
+import { redirect } from "@ademattos/bunbox";
+
+export async function middleware({ context }) {
+  if (context.user?.role !== "admin") {
+    return redirect("/dashboard");
+  }
+}
+```
+
+See the [middleware-auth example](https://github.com/demattosanthony/bunbox/tree/main/examples/middleware-auth) for a complete implementation.
