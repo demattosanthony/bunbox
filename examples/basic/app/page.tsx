@@ -3,12 +3,12 @@ import type { PageProps, LoaderContext } from "@ademattos/bunbox";
 export async function loader({ context }: LoaderContext) {
   // User data is passed from middleware
   return {
-    user: context.user,
+    user: context.user as { id: string; name: string; email: string } | undefined,
   };
 }
 
 export default function Home({ data }: PageProps) {
-  const user = data?.user as { name: string; email: string } | undefined;
+  const user = (data as { user?: { name: string; email: string } } | undefined)?.user;
 
   const handleLogout = () => {
     // Clear auth cookie

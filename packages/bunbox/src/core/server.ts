@@ -931,10 +931,13 @@ class BunboxServer {
     // This allows child middleware to override parent middleware
     for (let i = middlewarePaths.length - 1; i >= 0; i--) {
       const path = middlewarePaths[i];
-      if (this.middleware.has(path)) {
+      if (!path) continue; // noUncheckedIndexedAccess safety
+
+      const middlewareFile = this.middleware.get(path);
+      if (middlewareFile) {
         const middlewarePath = join(
           this.config.appDir,
-          this.middleware.get(path)!
+          middlewareFile
         );
         const absolutePath = resolveAbsolutePath(middlewarePath);
 
