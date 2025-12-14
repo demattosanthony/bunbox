@@ -16,109 +16,57 @@ export default function HomePage({ data }: PageProps) {
   const user = (data as { user: { id: string; role: string } })?.user;
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "800px", margin: "0 auto" }}>
-      <h1>🔒 Middleware Authentication Example</h1>
-      <p style={{ color: "#666" }}>
-        This example demonstrates how to use middleware for authentication and
-        authorization.
+    <div className="container">
+      <h1 className="page-title">Middleware Authentication</h1>
+      <p className="page-subtitle">
+        A simple, elegant example of route protection with cascading middleware.
       </p>
 
-      <div
-        style={{
-          background: "#e8f5e9",
-          padding: "1.5rem",
-          borderRadius: "8px",
-          marginTop: "2rem",
-          border: "2px solid #4CAF50",
-        }}
-      >
-        <h2 style={{ margin: "0 0 1rem 0", color: "#2e7d32" }}>
-          ✅ You're Authenticated!
-        </h2>
-        <p style={{ margin: "0.5rem 0" }}>
-          <strong>User ID:</strong> {user.id}
-        </p>
-        <p style={{ margin: "0.5rem 0" }}>
-          <strong>Role:</strong> {user.role}
-        </p>
+      <div className="card">
+        <div className="card-info">
+          <div className="info-row">
+            <span className="info-label">User ID</span>
+            <span className="info-value">{user.id}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Role</span>
+            <span className="info-value">
+              {user.role}
+              {user.role === "admin" && (
+                <span className="badge badge-warning" style={{ marginLeft: "0.5rem" }}>
+                  Admin
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "1rem",
-          marginTop: "2rem",
-        }}
-      >
-        <a
-          href="/dashboard"
-          style={{
-            padding: "1rem",
-            background: "#2196F3",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "4px",
-            textAlign: "center",
-          }}
-        >
-          Go to Dashboard
+      <div className="btn-group-grid">
+        <a href="/dashboard" className="btn btn-primary">
+          Dashboard
         </a>
-        <a
-          href="/admin"
-          style={{
-            padding: "1rem",
-            background: "#FF9800",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "4px",
-            textAlign: "center",
-          }}
-        >
-          Admin Panel {user.role !== "admin" && "(requires admin)"}
+        <a href="/admin" className="btn btn-secondary">
+          Admin Panel
         </a>
       </div>
 
-      <div
-        style={{
-          marginTop: "2rem",
-          padding: "1rem",
-          background: "#f5f5f5",
-          borderRadius: "4px",
-        }}
-      >
-        <h3>How it works:</h3>
-        <ul style={{ fontSize: "0.9rem", lineHeight: "1.6" }}>
-          <li>
-            <code>app/middleware.ts</code> protects all routes
-          </li>
-          <li>
-            <code>app/auth/middleware.ts</code> allows public access to /auth
-          </li>
-          <li>
-            <code>app/admin/middleware.ts</code> checks for admin role
-          </li>
-          <li>Middleware context flows to loaders and pages</li>
-        </ul>
+      <div className="note">
+        Routes are protected by <span className="code">middleware.ts</span> files.
+        Public routes like <span className="code">/auth/login</span> override parent middleware.
+        Admin routes check role permissions.
       </div>
+
+      <div className="divider" />
 
       <button
         onClick={() => {
           document.cookie = "auth_token=; path=/; max-age=0";
           window.location.href = "/auth/login";
         }}
-        style={{
-          marginTop: "2rem",
-          padding: "0.75rem 1.5rem",
-          background: "#f44336",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-          fontSize: "1rem",
-        }}
+        className="btn btn-danger"
       >
-        Logout
+        Sign Out
       </button>
     </div>
   );

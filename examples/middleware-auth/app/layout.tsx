@@ -1,7 +1,8 @@
 import type { PageMetadata } from "@ademattos/bunbox";
+import "./styles.css";
 
 export const metadata: PageMetadata = {
-  title: "Bunbox Middleware Auth Example",
+  title: "Bunbox Middleware Auth",
   description: "Authentication and authorization using middleware",
 };
 

@@ -15,127 +15,56 @@ export default function AdminPage({ data }: PageProps) {
   const user = (data as { user: { id: string; role: string } })?.user;
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "800px", margin: "0 auto" }}>
-      <h1>⚙️ Admin Panel</h1>
-      <p style={{ color: "#666" }}>
-        This page requires admin role. Protected by cascading middleware!
+    <div className="container">
+      <h1 className="page-title">Admin Panel</h1>
+      <p className="page-subtitle">
+        Role-based access control. Only admins can view this page.
       </p>
 
-      <div
-        style={{
-          background: "#fff3e0",
-          padding: "1.5rem",
-          borderRadius: "8px",
-          marginTop: "2rem",
-          border: "2px solid #FF9800",
-        }}
-      >
-        <h2 style={{ margin: "0 0 1rem 0", color: "#E65100" }}>
-          🔐 Admin Access Granted
-        </h2>
-        <p style={{ margin: "0.5rem 0" }}>
-          <strong>Admin ID:</strong> {user.id}
-        </p>
-        <p style={{ margin: "0.5rem 0" }}>
-          <strong>Role:</strong> {user.role}
-        </p>
-        <p style={{ margin: "1rem 0 0 0", fontSize: "0.9rem", color: "#666" }}>
-          Only users with the <code>admin</code> role can access this page.
-        </p>
+      <div className="card">
+        <div className="card-title">
+          Admin Access Granted
+          <span className="badge badge-warning" style={{ marginLeft: "0.75rem" }}>
+            Admin
+          </span>
+        </div>
+        <div className="card-info">
+          <div className="info-row">
+            <span className="info-label">Admin ID</span>
+            <span className="info-value">{user.id}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Role</span>
+            <span className="info-value">{user.role}</span>
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          marginTop: "2rem",
-          padding: "1.5rem",
-          background: "#f5f5f5",
-          borderRadius: "4px",
-        }}
-      >
-        <h3>Middleware Cascade:</h3>
-        <ol style={{ fontSize: "0.9rem", lineHeight: "1.8" }}>
-          <li>
-            <code>app/middleware.ts</code> verified authentication
-            <div style={{ paddingLeft: "1rem", color: "#666" }}>
-              → Added user to context
-            </div>
-          </li>
-          <li>
-            <code>app/admin/middleware.ts</code> checked admin role
-            <div style={{ paddingLeft: "1rem", color: "#666" }}>
-              → Would redirect if role !== "admin"
-              <br />→ Passed user through to page
-            </div>
-          </li>
-          <li>
-            Page loader received validated admin user
-            <div style={{ paddingLeft: "1rem", color: "#666" }}>
-              → Passed to page component
-            </div>
-          </li>
-        </ol>
+      <div className="note">
+        This page is protected by cascading middleware. First, <span className="code">app/middleware.ts</span> verifies
+        authentication. Then, <span className="code">app/admin/middleware.ts</span> checks for admin role.
+        Regular users are redirected to the dashboard.
       </div>
 
-      <div
-        style={{
-          marginTop: "2rem",
-          padding: "1rem",
-          background: "#e8f5e9",
-          borderRadius: "4px",
-          border: "1px solid #4CAF50",
-        }}
-      >
-        <p style={{ margin: 0, fontSize: "0.9rem" }}>
-          💡 <strong>Tip:</strong> Try logging in as a regular user and
-          accessing this page. The admin middleware will redirect you to the
-          dashboard!
-        </p>
-      </div>
-
-      <div style={{ marginTop: "2rem", display: "flex", gap: "1rem" }}>
-        <a
-          href="/"
-          style={{
-            padding: "0.75rem 1.5rem",
-            background: "#9E9E9E",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "4px",
-          }}
-        >
+      <div className="btn-group">
+        <a href="/" className="btn btn-secondary">
           ← Home
         </a>
-        <a
-          href="/dashboard"
-          style={{
-            padding: "0.75rem 1.5rem",
-            background: "#2196F3",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "4px",
-          }}
-        >
+        <a href="/dashboard" className="btn btn-primary">
           Dashboard
         </a>
       </div>
+
+      <div className="divider" />
 
       <button
         onClick={() => {
           document.cookie = "auth_token=; path=/; max-age=0";
           window.location.href = "/auth/login";
         }}
-        style={{
-          marginTop: "2rem",
-          padding: "0.75rem 1.5rem",
-          background: "#f44336",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-          fontSize: "1rem",
-        }}
+        className="btn btn-danger"
       >
-        Logout
+        Sign Out
       </button>
     </div>
   );

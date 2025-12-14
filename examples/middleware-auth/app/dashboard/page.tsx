@@ -15,104 +15,58 @@ export default function DashboardPage({ data }: PageProps) {
   const user = (data as { user: { id: string; role: string } })?.user;
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "800px", margin: "0 auto" }}>
-      <h1>📊 Dashboard</h1>
-      <p style={{ color: "#666" }}>
-        Welcome to your dashboard! This page is protected by authentication
-        middleware.
+    <div className="container">
+      <h1 className="page-title">Dashboard</h1>
+      <p className="page-subtitle">
+        Your personal dashboard. Protected by authentication middleware.
       </p>
 
-      <div
-        style={{
-          background: "#e3f2fd",
-          padding: "1.5rem",
-          borderRadius: "8px",
-          marginTop: "2rem",
-          border: "2px solid #2196F3",
-        }}
-      >
-        <h2 style={{ margin: "0 0 1rem 0", color: "#1976D2" }}>
-          User Information
-        </h2>
-        <div style={{ display: "grid", gap: "0.5rem" }}>
-          <p style={{ margin: 0 }}>
-            <strong>ID:</strong> {user.id}
-          </p>
-          <p style={{ margin: 0 }}>
-            <strong>Role:</strong> {user.role}
-          </p>
-          <p style={{ margin: 0 }}>
-            <strong>Access Level:</strong>{" "}
-            {user.role === "admin" ? "Full Access" : "Standard Access"}
-          </p>
+      <div className="card">
+        <div className="card-title">Account Details</div>
+        <div className="card-info">
+          <div className="info-row">
+            <span className="info-label">User ID</span>
+            <span className="info-value">{user.id}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Role</span>
+            <span className="info-value">{user.role}</span>
+          </div>
+          <div className="info-row">
+            <span className="info-label">Access</span>
+            <span className="info-value">
+              {user.role === "admin" ? "Full Access" : "Standard Access"}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div style={{ marginTop: "2rem", display: "flex", gap: "1rem" }}>
-        <a
-          href="/"
-          style={{
-            padding: "0.75rem 1.5rem",
-            background: "#9E9E9E",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "4px",
-          }}
-        >
+      <div className="btn-group">
+        <a href="/" className="btn btn-secondary">
           ← Home
         </a>
         {user.role === "admin" && (
-          <a
-            href="/admin"
-            style={{
-              padding: "0.75rem 1.5rem",
-              background: "#FF9800",
-              color: "white",
-              textDecoration: "none",
-              borderRadius: "4px",
-            }}
-          >
+          <a href="/admin" className="btn btn-primary">
             Admin Panel →
           </a>
         )}
       </div>
 
-      <div
-        style={{
-          marginTop: "2rem",
-          padding: "1rem",
-          background: "#f5f5f5",
-          borderRadius: "4px",
-        }}
-      >
-        <h3>Middleware Flow:</h3>
-        <ol style={{ fontSize: "0.9rem", lineHeight: "1.6" }}>
-          <li>
-            <code>app/middleware.ts</code> checked your auth cookie
-          </li>
-          <li>Validated your token and extracted user data</li>
-          <li>Added user to context for this page's loader</li>
-          <li>Loader received user data and passed it to the page</li>
-        </ol>
+      <div className="note">
+        The root <span className="code">middleware.ts</span> validates your auth cookie,
+        extracts user data, and passes it to the page loader through context.
       </div>
+
+      <div className="divider" />
 
       <button
         onClick={() => {
           document.cookie = "auth_token=; path=/; max-age=0";
           window.location.href = "/auth/login";
         }}
-        style={{
-          marginTop: "2rem",
-          padding: "0.75rem 1.5rem",
-          background: "#f44336",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-          fontSize: "1rem",
-        }}
+        className="btn btn-danger"
       >
-        Logout
+        Sign Out
       </button>
     </div>
   );

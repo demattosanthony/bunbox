@@ -17,95 +17,35 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "500px", margin: "0 auto" }}>
-      <h1>🔓 Login</h1>
-      <p style={{ color: "#666" }}>
-        This is a public page accessible without authentication.
+    <div className="container">
+      <h1 className="page-title">Sign In</h1>
+      <p className="page-subtitle">
+        Choose a role to continue. No credentials required for this demo.
       </p>
 
-      <div
-        style={{
-          background: "#fff3cd",
-          padding: "1rem",
-          borderRadius: "4px",
-          marginTop: "2rem",
-          border: "1px solid #ffc107",
-        }}
-      >
-        <p style={{ margin: 0, fontSize: "0.9rem" }}>
-          ℹ️ <strong>Demo Login:</strong> Choose a role to login. No password
-          required!
-        </p>
-      </div>
-
-      <div style={{ marginTop: "2rem", display: "flex", gap: "1rem" }}>
-        <button
-          onClick={() => handleLogin("user")}
-          style={{
-            flex: 1,
-            padding: "1rem",
-            background: "#2196F3",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "1rem",
-            fontWeight: "bold",
-          }}
-        >
-          Login as User
+      <div className="btn-group-grid">
+        <button onClick={() => handleLogin("user")} className="btn btn-primary">
+          Continue as User
         </button>
-        <button
-          onClick={() => handleLogin("admin")}
-          style={{
-            flex: 1,
-            padding: "1rem",
-            background: "#FF9800",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "1rem",
-            fontWeight: "bold",
-          }}
-        >
-          Login as Admin
+        <button onClick={() => handleLogin("admin")} className="btn btn-secondary">
+          Continue as Admin
         </button>
       </div>
 
-      <div
-        style={{
-          marginTop: "2rem",
-          padding: "1rem",
-          background: "#f5f5f5",
-          borderRadius: "4px",
-        }}
-      >
-        <h3>What happens when you login:</h3>
-        <ol style={{ fontSize: "0.9rem", lineHeight: "1.6" }}>
-          <li>A demo auth token is created with your role</li>
-          <li>Token is stored in a cookie</li>
-          <li>You're redirected to the home page</li>
-          <li>Root middleware validates your token</li>
-          <li>User data is available in all protected pages</li>
-        </ol>
+      <div className="note">
+        This is a public page accessible without authentication. The <span className="code">auth/middleware.ts</span> file
+        overrides the root middleware to allow public access to all <span className="code">/auth</span> routes.
       </div>
 
-      <div
-        style={{
-          marginTop: "2rem",
-          padding: "1rem",
-          background: "#e3f2fd",
-          borderRadius: "4px",
-          border: "1px solid #2196F3",
-        }}
-      >
-        <h4 style={{ margin: "0 0 0.5rem 0" }}>Try this:</h4>
-        <ul style={{ fontSize: "0.9rem", lineHeight: "1.6", margin: 0 }}>
-          <li>Login as <strong>User</strong> and try accessing <code>/admin</code> (redirects to dashboard)</li>
-          <li>Login as <strong>Admin</strong> and access <code>/admin</code> (granted access)</li>
-          <li>Logout and try accessing <code>/</code> (redirects to login)</li>
-        </ul>
+      <div className="divider" />
+
+      <div style={{ fontSize: "0.9375rem", color: "var(--color-text-secondary)" }}>
+        <div style={{ fontWeight: 500, marginBottom: "0.75rem", color: "var(--color-text)" }}>Try this</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div>• Login as <strong>User</strong> → can access home and dashboard</div>
+          <div>• Login as <strong>Admin</strong> → can access all pages including admin panel</div>
+          <div>• Visit protected routes → automatically redirects here</div>
+        </div>
       </div>
     </div>
   );
