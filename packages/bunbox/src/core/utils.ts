@@ -348,11 +348,39 @@ export async function loadBunPlugins(): Promise<BunPlugin[]> {
 }
 
 /**
- * Find CSS file in app directory
- * Checks common names in priority order: index.css, styles.css, global.css, app.css
+ * Find CSS file in app directory by parsing layout imports
+ * First checks for CSS imports in the root layout file, then falls back to common names
  * Returns null if no CSS file is found
  */
-export async function findCssFile(appDir: string): Promise<string | null> {
+export async function findCssFile(
+  appDir: string,
+  rootLayoutPath?: string
+): Promise<string | null> {
+  // If root layout path provided, try to parse CSS imports from it
+  if (rootLayoutPath && (await fileExists(rootLayoutPath))) {
+    try {
+      const layoutContent = await Bun.file(rootLayoutPath).text();
+
+      // Match CSS imports: import "./styles.css" or import './index.css' or import("./app.css")
+      const cssImportRegex = /import\s+(?:["']|(?:\(["']))(\.\/[^"']+\.css)["']/g;
+      const matches = layoutContent.matchAll(cssImportRegex);
+
+      for (const match of matches) {
+        if (match[1]) {
+          // Remove leading "./" and join with appDir
+          const cssFileName = match[1].replace(/^\.\//, "");
+          const cssPath = join(appDir, cssFileName);
+          if (await fileExists(cssPath)) {
+            return cssPath;
+          }
+        }
+      }
+    } catch (error) {
+      // If parsing fails, fall through to common names check
+    }
+  }
+
+  // Fallback: check common CSS file names in priority order
   const commonNames = ["index.css", "styles.css", "global.css", "app.css"];
 
   for (const name of commonNames) {

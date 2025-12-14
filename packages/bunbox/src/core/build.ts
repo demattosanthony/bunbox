@@ -126,7 +126,10 @@ export async function buildForProduction(
 
   // Build and hash CSS
   console.log(" ○ Building styles...");
-  const cssPath = await findCssFile(config.appDir);
+  const rootLayoutPath = layouts.has("/")
+    ? join(config.appDir, layouts.get("/")!)
+    : undefined;
+  const cssPath = await findCssFile(config.appDir, rootLayoutPath);
   let stylesHash = "";
 
   if (cssPath) {

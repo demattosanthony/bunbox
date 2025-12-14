@@ -523,7 +523,10 @@ class BunboxServer {
   private buildStylesRoute(): RouteHandlers {
     return {
       GET: async () => {
-        const cssPath = await findCssFile(this.config.appDir);
+        const cssPath = await findCssFile(
+          this.config.appDir,
+          this.rootLayoutPath || undefined
+        );
 
         if (!cssPath) {
           return new Response("/* No CSS file found */", {
