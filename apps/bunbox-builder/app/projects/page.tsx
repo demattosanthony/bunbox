@@ -1,4 +1,3 @@
-import { listProjects } from "@/lib/db";
 import { ProjectsList } from "./ProjectsList";
 import { Button } from "@/components/ui/button";
 import { Plus, FolderOpen, Sparkles } from "lucide-react";
@@ -8,25 +7,18 @@ export const metadata = {
   description: "Your created bunbox projects",
 };
 
-export async function loader() {
-  const projects = listProjects();
-  return { projects };
-}
-
-export default function ProjectsPage({
-  data,
-}: {
-  data: Awaited<ReturnType<typeof loader>>;
-}) {
+export default function ProjectsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-border/50">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-background" />
-          </div>
-          <span className="font-semibold text-lg">Bunbox Builder</span>
+          <a href="/" className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-foreground flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-background" />
+            </div>
+            <span className="font-semibold text-lg">Bunbox Builder</span>
+          </a>
         </div>
         <nav className="flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild className="gap-2">
@@ -53,7 +45,7 @@ export default function ProjectsPage({
           </p>
         </div>
 
-        <ProjectsList initialProjects={data.projects} />
+        <ProjectsList />
       </main>
     </div>
   );

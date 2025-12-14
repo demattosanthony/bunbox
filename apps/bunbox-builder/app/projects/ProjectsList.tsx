@@ -1,17 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { FolderOpen, Trash2, ExternalLink, Sparkles } from "lucide-react";
-import type { Project } from "@/lib/db/schema";
+import { FolderOpen, Trash2, ExternalLink, Sparkles, Loader2 } from "lucide-react";
 
-interface ProjectsListProps {
-  initialProjects: Project[];
+interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  path: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export function ProjectsList({ initialProjects }: ProjectsListProps) {
-  const [projects, setProjects] = useState(initialProjects);
+export function ProjectsList() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/projects")
+      .then((res) => res.json())
+      .then((data) => {
+        setProjects(data.projects || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load projects:", err);
+        setLoading(false);
+      });
+  }, []);
 
   const deleteProject = async (id: string) => {
     if (!confirm("Are you sure you want to delete this project?")) return;
@@ -23,6 +41,14 @@ export function ProjectsList({ initialProjects }: ProjectsListProps) {
       console.error("Failed to delete project:", error);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (projects.length === 0) {
     return (
