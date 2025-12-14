@@ -44,6 +44,9 @@ export type {
   RouteMatch,
   PageModule,
   LayoutModule,
+  MiddlewareContext,
+  MiddlewareResult,
+  MiddlewareModule,
   SocketUser,
   SocketMessage,
   SocketContext,
@@ -79,6 +82,17 @@ export type { UseStreamOptions, UseStreamResult } from "./client/useStream";
 
 export { useIsClient } from "./client/useIsClient";
 export { useClientEffect } from "./client/useClientEffect";
+
+// Middleware utilities
+export {
+  redirect,
+  parseCookies,
+  getCookie,
+  setCookie,
+  deleteCookie,
+  createSetCookie,
+} from "./core/middleware";
+export type { CookieOptions } from "./core/middleware";
 
 // OpenAPI generation utilities
 export {

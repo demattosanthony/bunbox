@@ -1,0 +1,21 @@
+{
+  "name": "bunbox-middleware-auth-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Middleware authentication example for Bunbox",
+  "scripts": {
+    "dev": "bunbox dev",
+    "build": "bunbox build",
+    "start": "bunbox start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ademattos/bunbox": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.2",
+    "typescript": "^5.9.3"
+  }
+}

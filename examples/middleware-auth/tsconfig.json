@@ -1,0 +1,9 @@
+{
+  "extends": "../../packages/bunbox/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["app/**/*", "bunbox.config.ts"],
+  "exclude": ["node_modules", "dist", ".bunbox"]
+}

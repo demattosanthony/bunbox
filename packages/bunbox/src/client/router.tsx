@@ -133,8 +133,15 @@ async function fetchLoaderData(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pathname, params, query }),
     });
-    const { data } = await res.json();
-    return data;
+    const json = await res.json();
+
+    // Handle middleware redirect
+    if (json.redirect) {
+      window.location.href = json.redirect;
+      return undefined;
+    }
+
+    return json.data;
   } catch {
     return undefined;
   }

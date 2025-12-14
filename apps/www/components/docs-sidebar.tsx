@@ -27,6 +27,7 @@ const navigation: NavItem[] = [
       { title: "Layouts", href: "/docs/layouts" },
       { title: "Client-Side Routing", href: "/docs/client-routing" },
       { title: "Data Loading", href: "/docs/data-loading" },
+      { title: "Page Middleware", href: "/docs/page-middleware" },
     ],
   },
   {
