@@ -1,0 +1,20 @@
+{
+  "name": "bunbox-builder",
+  "version": "0.1.0",
+  "description": "AI-powered bunbox app builder - create full-stack apps through conversation",
+  "type": "module",
+  "scripts": {
+    "dev": "bunbox dev",
+    "build": "bunbox build",
+    "start": "bunbox start"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.0",
+    "@ademattos/bunbox": "workspace:*",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
