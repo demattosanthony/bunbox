@@ -77,6 +77,9 @@ export type {
 export { useStream } from "./client/useStream";
 export type { UseStreamOptions, UseStreamResult } from "./client/useStream";
 
+export { useIsClient } from "./client/useIsClient";
+export { useClientEffect } from "./client/useClientEffect";
+
 // OpenAPI generation utilities
 export {
   generateOpenAPISpec,
