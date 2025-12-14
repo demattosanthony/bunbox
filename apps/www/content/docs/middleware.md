@@ -5,11 +5,7 @@ order: 11
 category: API Routes
 ---
 
-## Overview
-
-API middleware runs on your API routes using the `.use()` method.
-
-## Basic Usage
+## Creating Middleware
 
 Create a middleware function:
 
@@ -103,6 +99,31 @@ export const deleteResource = route
   });
 ```
 
+## Async Middleware
+
+Middleware supports async operations:
+
+```typescript
+const loadUser = async (ctx) => {
+  const userId = ctx.params.id;
+  const user = await db.users.findById(userId);
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return { user };
+};
+
+export const getUser = route
+  .get()
+  .use(loadUser)
+  .handle(async (ctx) => {
+    // ctx.user is loaded from database
+    return { user: ctx.user };
+  });
+```
+
 ## Reusable Middleware
 
 Create reusable middleware:
@@ -120,11 +141,34 @@ export const requireAuth = async (ctx) => {
   return { user };
 };
 
-// Use in routes
+// middleware/rateLimit.ts
+const requestCounts = new Map<string, { count: number; resetAt: number }>();
+
+export const rateLimit = async (ctx) => {
+  const ip = ctx.headers.get("x-forwarded-for") ?? "unknown";
+  const now = Date.now();
+  const limit = requestCounts.get(ip);
+
+  if (limit && now < limit.resetAt && limit.count >= 100) {
+    throw new Error("Rate limit exceeded");
+  }
+
+  requestCounts.set(ip, {
+    count: (limit?.count ?? 0) + 1,
+    resetAt: limit?.resetAt ?? now + 60000,
+  });
+};
+```
+
+Use in routes:
+
+```typescript
 import { requireAuth } from "@/middleware/auth";
+import { rateLimit } from "@/middleware/rateLimit";
 
 export const getProtectedUser = route
   .get()
+  .use(rateLimit)
   .use(requireAuth)
   .handle(async (ctx) => {
     return { user: ctx.user };
@@ -132,3 +176,30 @@ export const getProtectedUser = route
 ```
 
 > **Note:** For CORS configuration, use `bunbox.config.ts` instead of middleware. See [Configuration](/docs/configuration#cors) for details.
+
+## Conditional Middleware
+
+Apply middleware conditionally:
+
+```typescript
+const optionalAuth = async (ctx) => {
+  const token = ctx.headers.get("authorization");
+
+  if (token) {
+    const user = await verifyToken(token);
+    return { user };
+  }
+
+  return { user: null };
+};
+
+export const getGreeting = route
+  .get()
+  .use(optionalAuth)
+  .handle(async (ctx) => {
+    if (ctx.user) {
+      return { message: `Hello, ${ctx.user.name}` };
+    }
+    return { message: "Hello, guest" };
+  });
+```
