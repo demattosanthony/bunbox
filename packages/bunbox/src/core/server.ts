@@ -43,6 +43,7 @@ import {
   getErrorMessage,
   loadBunPlugins,
   registerAssetPlugin,
+  findCssFile,
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
@@ -522,14 +523,15 @@ class BunboxServer {
   private buildStylesRoute(): RouteHandlers {
     return {
       GET: async () => {
-        const cssPath = join(this.config.appDir, "index.css");
-        const file = Bun.file(cssPath);
+        const cssPath = await findCssFile(this.config.appDir);
 
-        if (!(await file.exists())) {
+        if (!cssPath) {
           return new Response("/* No CSS file found */", {
             headers: { "Content-Type": "text/css" },
           });
         }
+
+        const file = Bun.file(cssPath);
 
         try {
           const plugins = await loadBunPlugins();

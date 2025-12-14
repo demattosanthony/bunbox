@@ -20,6 +20,7 @@ import {
   getErrorMessage,
   generateHash,
   loadBunPlugins,
+  findCssFile,
 } from "./utils";
 
 /**
@@ -125,10 +126,10 @@ export async function buildForProduction(
 
   // Build and hash CSS
   console.log(" ○ Building styles...");
-  const cssPath = join(config.appDir, "index.css");
+  const cssPath = await findCssFile(config.appDir);
   let stylesHash = "";
 
-  if (await fileExists(cssPath)) {
+  if (cssPath) {
     const plugins = await loadBunPlugins();
     const cssResult = await Bun.build({
       entrypoints: [cssPath],
@@ -146,7 +147,7 @@ export async function buildForProduction(
       console.warn(" ⚠ CSS build failed, styles will be processed at runtime");
     }
   } else {
-    console.log(" ○ No index.css found, skipping styles");
+    console.log(" ○ No CSS file found, skipping styles");
   }
 
   // Write build metadata

@@ -346,3 +346,21 @@ export async function loadBunPlugins(): Promise<BunPlugin[]> {
     return [];
   }
 }
+
+/**
+ * Find CSS file in app directory
+ * Checks common names in priority order: index.css, styles.css, global.css, app.css
+ * Returns null if no CSS file is found
+ */
+export async function findCssFile(appDir: string): Promise<string | null> {
+  const commonNames = ["index.css", "styles.css", "global.css", "app.css"];
+
+  for (const name of commonNames) {
+    const cssPath = join(appDir, name);
+    if (await fileExists(cssPath)) {
+      return cssPath;
+    }
+  }
+
+  return null;
+}
