@@ -346,3 +346,55 @@ export async function loadBunPlugins(): Promise<BunPlugin[]> {
     return [];
   }
 }
+
+/**
+ * Extract CSS imports from a file's content
+ * Matches: import "./styles.css", import '../parent.css', import("./app.css"), import from "./module.css"
+ */
+function extractCssImports(content: string): string[] {
+  // Match any string literal containing a relative CSS import (starts with . or ..)
+  const cssImportRegex = /["'](\.[^"']*\.css)["']/g;
+  const imports: string[] = [];
+  let match;
+
+  while ((match = cssImportRegex.exec(content)) !== null) {
+    if (match[1]) {
+      imports.push(match[1]);
+    }
+  }
+
+  return imports;
+}
+
+/**
+ * Find all CSS files imported across layouts and pages
+ * Scans provided files for CSS imports and returns unique list of absolute paths
+ */
+export async function findAllCssFiles(
+  filesToScan: string[]
+): Promise<string[]> {
+  const cssFiles = new Set<string>();
+
+  for (const filePath of filesToScan) {
+    if (!(await fileExists(filePath))) continue;
+
+    try {
+      const content = await Bun.file(filePath).text();
+      const imports = extractCssImports(content);
+
+      for (const importPath of imports) {
+        // Resolve relative to the file doing the import
+        const fileDir = join(filePath, "..");
+        const absoluteCssPath = resolve(fileDir, importPath);
+
+        if (await fileExists(absoluteCssPath)) {
+          cssFiles.add(absoluteCssPath);
+        }
+      }
+    } catch (error) {
+      // Skip files that can't be read
+    }
+  }
+
+  return Array.from(cssFiles);
+}

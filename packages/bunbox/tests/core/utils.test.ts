@@ -3,8 +3,10 @@
  * Tests for core utility functions including security features
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { join, resolve } from "path";
+import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "os";
 import {
   getErrorMessage,
   generateHash,
@@ -12,6 +14,7 @@ import {
   fileExists,
   getFaviconContentType,
   resolveMetadataUrl,
+  findAllCssFiles,
 } from "../../src/core/utils";
 
 describe("getErrorMessage", () => {
@@ -193,5 +196,216 @@ describe("resolveMetadataUrl", () => {
   test("returns undefined when metadataBase is not set and url is relative", () => {
     expect(resolveMetadataUrl("/og-image.png", undefined)).toBeUndefined();
     expect(resolveMetadataUrl("og-image.png", undefined)).toBeUndefined();
+  });
+});
+
+describe("findAllCssFiles", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "bunbox-css-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("finds CSS imported in layout files", async () => {
+    // Create structure:
+    // app/layout.tsx -> imports ./index.css
+    // app/index.css
+    await mkdir(join(tempDir, "app"), { recursive: true });
+    await writeFile(
+      join(tempDir, "app", "layout.tsx"),
+      'import React from "react";\nimport "./index.css";\nexport default Layout;'
+    );
+    await writeFile(join(tempDir, "app", "index.css"), "body { margin: 0; }");
+
+    const cssFiles = await findAllCssFiles([join(tempDir, "app", "layout.tsx")]);
+
+    expect(cssFiles.length).toBe(1);
+    expect(cssFiles[0]).toBe(join(tempDir, "app", "index.css"));
+  });
+
+  test("finds CSS imported in page files", async () => {
+    // Create structure:
+    // app/dashboard/page.tsx -> imports ./dashboard.css
+    // app/dashboard/dashboard.css
+    await mkdir(join(tempDir, "app", "dashboard"), { recursive: true });
+    await writeFile(
+      join(tempDir, "app", "dashboard", "page.tsx"),
+      'import React from "react";\nimport "./dashboard.css";\nexport default Page;'
+    );
+    await writeFile(
+      join(tempDir, "app", "dashboard", "dashboard.css"),
+      ".dashboard { padding: 20px; }"
+    );
+
+    const cssFiles = await findAllCssFiles([
+      join(tempDir, "app", "dashboard", "page.tsx"),
+    ]);
+
+    expect(cssFiles.length).toBe(1);
+    expect(cssFiles[0]).toBe(join(tempDir, "app", "dashboard", "dashboard.css"));
+  });
+
+  test("finds CSS with parent directory imports", async () => {
+    // Create structure:
+    // app/styles/global.css
+    // app/dashboard/page.tsx -> imports ../styles/global.css
+    await mkdir(join(tempDir, "app", "styles"), { recursive: true });
+    await mkdir(join(tempDir, "app", "dashboard"), { recursive: true });
+    await writeFile(
+      join(tempDir, "app", "styles", "global.css"),
+      "* { box-sizing: border-box; }"
+    );
+    await writeFile(
+      join(tempDir, "app", "dashboard", "page.tsx"),
+      'import React from "react";\nimport "../styles/global.css";\nexport default Page;'
+    );
+
+    const cssFiles = await findAllCssFiles([
+      join(tempDir, "app", "dashboard", "page.tsx"),
+    ]);
+
+    expect(cssFiles.length).toBe(1);
+    expect(cssFiles[0]).toBe(join(tempDir, "app", "styles", "global.css"));
+  });
+
+  test("finds CSS across multiple files", async () => {
+    // Create structure:
+    // app/layout.tsx -> imports ./root.css
+    // app/dashboard/layout.tsx -> imports ./dash.css
+    // app/profile/page.tsx -> imports ./profile.css
+    await mkdir(join(tempDir, "app"), { recursive: true });
+    await mkdir(join(tempDir, "app", "dashboard"), { recursive: true });
+    await mkdir(join(tempDir, "app", "profile"), { recursive: true });
+
+    await writeFile(
+      join(tempDir, "app", "layout.tsx"),
+      'import "./root.css";\nexport default Layout;'
+    );
+    await writeFile(join(tempDir, "app", "root.css"), "body { margin: 0; }");
+
+    await writeFile(
+      join(tempDir, "app", "dashboard", "layout.tsx"),
+      'import "./dash.css";\nexport default DashLayout;'
+    );
+    await writeFile(
+      join(tempDir, "app", "dashboard", "dash.css"),
+      ".dash { color: blue; }"
+    );
+
+    await writeFile(
+      join(tempDir, "app", "profile", "page.tsx"),
+      'import "./profile.css";\nexport default Profile;'
+    );
+    await writeFile(
+      join(tempDir, "app", "profile", "profile.css"),
+      ".profile { font-size: 16px; }"
+    );
+
+    const cssFiles = await findAllCssFiles([
+      join(tempDir, "app", "layout.tsx"),
+      join(tempDir, "app", "dashboard", "layout.tsx"),
+      join(tempDir, "app", "profile", "page.tsx"),
+    ]);
+
+    expect(cssFiles.length).toBe(3);
+    expect(cssFiles).toContain(join(tempDir, "app", "root.css"));
+    expect(cssFiles).toContain(join(tempDir, "app", "dashboard", "dash.css"));
+    expect(cssFiles).toContain(join(tempDir, "app", "profile", "profile.css"));
+  });
+
+  test("deduplicates CSS files imported multiple times", async () => {
+    // Create structure where global.css is imported by multiple files
+    await mkdir(join(tempDir, "app"), { recursive: true });
+    await mkdir(join(tempDir, "app", "dashboard"), { recursive: true });
+
+    await writeFile(join(tempDir, "app", "global.css"), "* { margin: 0; }");
+
+    await writeFile(
+      join(tempDir, "app", "layout.tsx"),
+      'import "./global.css";\nexport default Layout;'
+    );
+    await writeFile(
+      join(tempDir, "app", "dashboard", "page.tsx"),
+      'import "../global.css";\nexport default Page;'
+    );
+
+    const cssFiles = await findAllCssFiles([
+      join(tempDir, "app", "layout.tsx"),
+      join(tempDir, "app", "dashboard", "page.tsx"),
+    ]);
+
+    // Should only return one instance of global.css
+    expect(cssFiles.length).toBe(1);
+    expect(cssFiles[0]).toBe(join(tempDir, "app", "global.css"));
+  });
+
+  test("handles files with no CSS imports", async () => {
+    await mkdir(join(tempDir, "app"), { recursive: true });
+    await writeFile(
+      join(tempDir, "app", "page.tsx"),
+      'import React from "react";\nexport default Page;'
+    );
+
+    const cssFiles = await findAllCssFiles([join(tempDir, "app", "page.tsx")]);
+
+    expect(cssFiles.length).toBe(0);
+  });
+
+  test("handles non-existent files gracefully", async () => {
+    const cssFiles = await findAllCssFiles([join(tempDir, "non-existent.tsx")]);
+
+    expect(cssFiles.length).toBe(0);
+  });
+
+  test("handles CSS imports that reference non-existent files", async () => {
+    await mkdir(join(tempDir, "app"), { recursive: true });
+    await writeFile(
+      join(tempDir, "app", "page.tsx"),
+      'import "./missing.css";\nexport default Page;'
+    );
+    // Note: missing.css file is NOT created
+
+    const cssFiles = await findAllCssFiles([join(tempDir, "app", "page.tsx")]);
+
+    // Should not include non-existent CSS files
+    expect(cssFiles.length).toBe(0);
+  });
+
+  test("handles various import syntax formats", async () => {
+    await mkdir(join(tempDir, "app"), { recursive: true });
+
+    // Test different import formats
+    await writeFile(
+      join(tempDir, "app", "page.tsx"),
+      `import "./style1.css";
+import './style2.css';
+import("./style3.css");
+import styles from "./module.css";
+export default Page;`
+    );
+
+    // Create all CSS files
+    await writeFile(join(tempDir, "app", "style1.css"), ".a {}");
+    await writeFile(join(tempDir, "app", "style2.css"), ".b {}");
+    await writeFile(join(tempDir, "app", "style3.css"), ".c {}");
+    await writeFile(join(tempDir, "app", "module.css"), ".d {}");
+
+    const cssFiles = await findAllCssFiles([join(tempDir, "app", "page.tsx")]);
+
+    expect(cssFiles.length).toBe(4);
+    expect(cssFiles).toContain(join(tempDir, "app", "style1.css"));
+    expect(cssFiles).toContain(join(tempDir, "app", "style2.css"));
+    expect(cssFiles).toContain(join(tempDir, "app", "style3.css"));
+    expect(cssFiles).toContain(join(tempDir, "app", "module.css"));
+  });
+
+  test("returns empty array for empty input", async () => {
+    const cssFiles = await findAllCssFiles([]);
+
+    expect(cssFiles.length).toBe(0);
   });
 });

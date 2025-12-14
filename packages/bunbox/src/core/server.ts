@@ -43,6 +43,7 @@ import {
   getErrorMessage,
   loadBunPlugins,
   registerAssetPlugin,
+  findAllCssFiles,
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
@@ -522,11 +523,24 @@ class BunboxServer {
   private buildStylesRoute(): RouteHandlers {
     return {
       GET: async () => {
-        const cssPath = join(this.config.appDir, "index.css");
-        const file = Bun.file(cssPath);
+        // Gather all layout and page file paths to scan
+        const filesToScan: string[] = [];
 
-        if (!(await file.exists())) {
-          return new Response("/* No CSS file found */", {
+        // Add all layout files
+        for (const layoutPath of this.layouts.values()) {
+          filesToScan.push(join(this.config.appDir, layoutPath));
+        }
+
+        // Add all page files
+        for (const route of this.pageRoutes) {
+          filesToScan.push(join(this.config.appDir, route.filepath));
+        }
+
+        // Find all CSS files imported across layouts and pages
+        const cssFiles = await findAllCssFiles(filesToScan);
+
+        if (cssFiles.length === 0) {
+          return new Response("/* No CSS files found */", {
             headers: { "Content-Type": "text/css" },
           });
         }
@@ -534,13 +548,18 @@ class BunboxServer {
         try {
           const plugins = await loadBunPlugins();
           const result = await Bun.build({
-            entrypoints: [cssPath],
+            entrypoints: cssFiles,
             minify: !this.config.development,
             plugins: plugins.length ? plugins : undefined,
           });
 
-          if (result.success && result.outputs[0]) {
-            return new Response(await result.outputs[0].text(), {
+          if (result.success && result.outputs.length > 0) {
+            // Combine all CSS outputs into a single response
+            const combinedCss = await Promise.all(
+              result.outputs.map((output) => output.text())
+            );
+
+            return new Response(combinedCss.join("\n"), {
               headers: {
                 "Content-Type": "text/css",
                 "Cache-Control": getCacheControl(this.config.development),
@@ -551,8 +570,12 @@ class BunboxServer {
           console.error("CSS processing error:", error);
         }
 
-        // Fallback to raw file
-        return new Response(file, {
+        // Fallback: concatenate raw CSS files
+        const rawCss = await Promise.all(
+          cssFiles.map((file) => Bun.file(file).text())
+        );
+
+        return new Response(rawCss.join("\n"), {
           headers: {
             "Content-Type": "text/css",
             "Cache-Control": getCacheControl(this.config.development),
