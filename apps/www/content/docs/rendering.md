@@ -97,6 +97,158 @@ export default function UserPage({ data }: PageProps) {
 
 Unlike Next.js App Router, you don't need `"use client"` directives. Every component is automatically available on the client after hydration.
 
+## Client-Only Code
+
+### Browser APIs and Libraries
+
+Some code can only run in the browser (Three.js, WebGL, `window`, `localStorage`, etc.). Bunbox provides React-native utilities for handling this safely.
+
+### useIsClient Hook
+
+The `useIsClient` hook uses React's `useSyncExternalStore` to detect whether code is running on the client. This is the official React pattern for avoiding hydration mismatches.
+
+```tsx
+import { useIsClient } from "@ademattos/bunbox";
+
+export default function BrowserOnly() {
+  const isClient = useIsClient();
+
+  if (!isClient) {
+    return <div>Loading...</div>;
+  }
+
+  // Safe to use browser APIs here
+  return <div>Window width: {window.innerWidth}px</div>;
+}
+```
+
+### useClientEffect Hook
+
+The `useClientEffect` hook is a convenience wrapper around `useEffect` that only runs on the client, eliminating the need for `typeof window` checks.
+
+```tsx
+import { useClientEffect } from "@ademattos/bunbox";
+import * as THREE from "three";
+
+export default function ThreeScene() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useClientEffect(() => {
+    // No need for typeof window checks!
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight);
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current });
+
+    // ... Three.js setup
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    return () => {
+      renderer.dispose();
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} />;
+}
+```
+
+### Code Splitting with React.lazy
+
+Combine with React's native `Suspense` and `lazy` for optimal loading:
+
+```tsx
+import { lazy, Suspense } from "react";
+
+const ThreeScene = lazy(() => import("./ThreeScene"));
+
+export default function App() {
+  return (
+    <Suspense fallback={<div>Loading 3D scene...</div>}>
+      <ThreeScene />
+    </Suspense>
+  );
+}
+```
+
+**Benefits:**
+- Client-only code is code-split automatically
+- Native React pattern (no custom abstractions)
+- Built-in fallback handling
+- Works with SSR streaming
+
+### Common Use Cases
+
+**localStorage:**
+
+```tsx
+import { useClientEffect } from "@ademattos/bunbox";
+
+function useLocalStorage(key: string, initialValue: string) {
+  const [value, setValue] = useState(initialValue);
+
+  useClientEffect(() => {
+    const stored = localStorage.getItem(key);
+    if (stored) setValue(stored);
+  }, [key]);
+
+  useClientEffect(() => {
+    localStorage.setItem(key, value);
+  }, [key, value]);
+
+  return [value, setValue];
+}
+```
+
+**Window size:**
+
+```tsx
+import { useClientEffect } from "@ademattos/bunbox";
+
+function useWindowSize() {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useClientEffect(() => {
+    const handleResize = () => {
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  return size;
+}
+```
+
+**Media queries:**
+
+```tsx
+import { useClientEffect } from "@ademattos/bunbox";
+
+function usePrefersColorScheme() {
+  const [scheme, setScheme] = useState<"light" | "dark">("light");
+
+  useClientEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    setScheme(mediaQuery.matches ? "dark" : "light");
+
+    const handler = (e: MediaQueryListEvent) => {
+      setScheme(e.matches ? "dark" : "light");
+    };
+
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, []);
+
+  return scheme;
+}
+```
+
 ## Data Flow
 
 ```
