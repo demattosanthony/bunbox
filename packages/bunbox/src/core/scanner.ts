@@ -24,6 +24,12 @@ const LAYOUT_PATTERNS = [
   "**/layout.jsx",
   "**/layout.js",
 ];
+const MIDDLEWARE_PATTERNS = [
+  "**/middleware.tsx",
+  "**/middleware.ts",
+  "**/middleware.jsx",
+  "**/middleware.js",
+];
 
 /**
  * Recursively scan directory for files matching patterns
@@ -114,6 +120,25 @@ export async function scanLayouts(
   }
 
   return layouts;
+}
+
+/**
+ * Scan for middleware files
+ */
+export async function scanMiddleware(
+  appDir: string
+): Promise<Map<string, string>> {
+  const middleware = new Map<string, string>();
+  const files = await scanFiles(appDir, MIDDLEWARE_PATTERNS);
+
+  for (const file of files) {
+    const dir = file.replace(/\/?middleware\.(tsx|ts|jsx|js)$/, "");
+    const routePath =
+      dir === "" || dir === "/" ? "/" : `/${dir.replace(/^app\/?/, "")}`;
+    middleware.set(routePath, file);
+  }
+
+  return middleware;
 }
 
 /**

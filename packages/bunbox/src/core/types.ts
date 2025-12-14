@@ -244,6 +244,7 @@ export interface PageProps {
 export interface LoaderContext {
   params: Record<string, string>;
   query: Record<string, string>;
+  context: Record<string, unknown>;
 }
 
 /**
@@ -261,6 +262,37 @@ export interface PageModule {
 export interface LayoutModule {
   default: React.ComponentType<{ children: React.ReactNode }>;
   metadata?: PageMetadata;
+}
+
+/**
+ * Context passed to middleware functions
+ */
+export interface MiddlewareContext {
+  request: Request;
+  params: Record<string, string>;
+  query: Record<string, string>;
+  context: Record<string, unknown>;
+}
+
+/**
+ * Middleware function can return:
+ * - Response: short-circuit and return the response (redirect, 401, etc)
+ * - Record: add data to context for downstream middleware/loaders/pages
+ * - void/undefined: continue without adding to context
+ */
+export type MiddlewareResult =
+  | Response
+  | Record<string, unknown>
+  | void
+  | undefined;
+
+/**
+ * Middleware module with middleware function
+ */
+export interface MiddlewareModule {
+  middleware: (
+    context: MiddlewareContext
+  ) => MiddlewareResult | Promise<MiddlewareResult>;
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   scanWsRoutes,
   scanSocketRoutes,
   scanLayouts,
+  scanMiddleware,
   scanWorker,
   scanJobs,
 } from "./scanner";
@@ -58,6 +59,7 @@ import type {
   PageMetadata,
   PageModule,
   LayoutModule,
+  MiddlewareModule,
   SocketRouteModule,
   SocketUser,
   SocketMessage,
@@ -185,6 +187,7 @@ class BunboxServer {
   private wsRoutes: Route[] = [];
   private socketRoutes: Route[] = [];
   private layouts: Map<string, string> = new Map();
+  private middleware: Map<string, string> = new Map();
   private wsHandlers: Map<string, WsRouteModule> = new Map();
   private socketHandlers: Map<string, SocketRouteModule> = new Map();
   private socketUsers: Map<string, Map<string, SocketUser>> = new Map(); // topic -> userId -> user
@@ -240,6 +243,7 @@ class BunboxServer {
     // Skip HTTP-related initialization in worker-only mode
     if (!isWorkerOnly) {
       this.layouts = await scanLayouts(this.config.appDir);
+      this.middleware = await scanMiddleware(this.config.appDir);
 
       // Check for pre-built artifacts in production
       const useBuildArtifacts =
@@ -910,6 +914,77 @@ class BunboxServer {
   }
 
   /**
+   * Execute middleware for a given path
+   * Returns either a Response (to short-circuit) or accumulated context
+   */
+  private async executeMiddleware(
+    req: Request,
+    urlPath: string,
+    params: Record<string, string>,
+    query: Record<string, string>
+  ): Promise<{ response?: Response; context: Record<string, unknown> }> {
+    // Get applicable middleware paths (same logic as layouts)
+    const middlewarePaths = getApplicableLayoutPaths(urlPath);
+    const context: Record<string, unknown> = {};
+
+    // Execute middleware in REVERSE order (child to parent)
+    // This allows child middleware to override parent middleware
+    for (let i = middlewarePaths.length - 1; i >= 0; i--) {
+      const path = middlewarePaths[i];
+      if (this.middleware.has(path)) {
+        const middlewarePath = join(
+          this.config.appDir,
+          this.middleware.get(path)!
+        );
+        const absolutePath = resolveAbsolutePath(middlewarePath);
+
+        try {
+          const middlewareModule = await dynamicImport<MiddlewareModule>(
+            absolutePath,
+            this.config.development
+          );
+
+          if (typeof middlewareModule.middleware === "function") {
+            const result = await middlewareModule.middleware({
+              request: req,
+              params,
+              query,
+              context,
+            });
+
+            // If middleware returns a Response, short-circuit
+            if (result instanceof Response) {
+              return { response: result, context };
+            }
+
+            // If middleware returns any value (including empty object),
+            // merge it into context and stop executing parent middleware
+            if (result !== undefined) {
+              if (result && typeof result === "object") {
+                Object.assign(context, result);
+              }
+              // Stop executing parent middleware - child middleware handled this path
+              return { context };
+            }
+
+            // If middleware returns undefined, continue to parent middleware
+          }
+        } catch (error) {
+          console.error(
+            `Middleware error at ${path}: ${getErrorMessage(error)}`
+          );
+          return {
+            response: new Response("Internal Server Error", { status: 500 }),
+            context,
+          };
+        }
+      }
+    }
+
+    return { context };
+  }
+
+  /**
    * Handle SSR page request
    */
   private async handlePageRequest(
@@ -924,24 +999,39 @@ class BunboxServer {
     }
 
     try {
+      const urlPath = getRequestUrl(req).pathname;
+
+      // Execute middleware before loading page
+      const middlewareResult = await this.executeMiddleware(
+        req,
+        urlPath,
+        match.params,
+        match.query
+      );
+
+      // If middleware returned a response, return it immediately
+      if (middlewareResult.response) {
+        return middlewareResult.response;
+      }
+
       const absolutePagePath = resolveAbsolutePath(pagePath);
       const pageModule = await dynamicImport<PageModule>(
         absolutePagePath,
         this.config.development
       );
 
-      // Execute loader if present
+      // Execute loader if present, passing middleware context
       let loaderData: unknown = undefined;
       if (typeof pageModule.loader === "function") {
         loaderData = await pageModule.loader({
           params: match.params,
           query: match.query,
+          context: middlewareResult.context,
         });
       }
 
       // Find applicable layouts using shared utility
       const layoutModules: LayoutModule[] = [];
-      const urlPath = getRequestUrl(req).pathname;
       const layoutPaths = getApplicableLayoutPaths(urlPath);
 
       for (const path of layoutPaths) {
@@ -994,6 +1084,32 @@ class BunboxServer {
         query: Record<string, string>;
       };
 
+      // Execute middleware first
+      const middlewareResult = await this.executeMiddleware(
+        req,
+        body.pathname,
+        body.params,
+        body.query
+      );
+
+      // If middleware returned a response (like a redirect), handle it
+      if (middlewareResult.response) {
+        // For redirects, extract the Location header and return it to client
+        if (
+          middlewareResult.response.status >= 300 &&
+          middlewareResult.response.status < 400
+        ) {
+          const location = middlewareResult.response.headers.get("Location");
+          return Response.json({ redirect: location });
+        }
+        // For other responses (401, 403, etc), return status and message
+        const text = await middlewareResult.response.text();
+        return Response.json(
+          { error: text || middlewareResult.response.statusText },
+          { status: middlewareResult.response.status }
+        );
+      }
+
       // Find matching page route
       const route = this.pageRoutes.find((r) => {
         // Convert route pattern to check against pathname
@@ -1022,6 +1138,7 @@ class BunboxServer {
       const data = await pageModule.loader({
         params: body.params,
         query: body.query,
+        context: middlewareResult.context,
       });
 
       return Response.json({ data });
