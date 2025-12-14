@@ -1,9 +1,11 @@
-import { defineConfig } from "@ademattos/bunbox";
+import type { BunboxConfig } from "@ademattos/bunbox";
 
-export default defineConfig({
+const config: BunboxConfig = {
   port: 3001,
   cors: {
     origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE"],
   },
-});
+};
+
+export default config;
