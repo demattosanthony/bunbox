@@ -13,3 +13,5 @@ export { clearQueryCache, clearQueryCacheKey } from "./client/useQuery";
 export type { UseQueryOptions, UseQueryResult } from "./client/useQuery";
 export { useIsClient } from "./client/useIsClient";
 export { useClientEffect } from "./client/useClientEffect";
+export { useStream } from "./client/useStream";
+export type { UseStreamOptions, UseStreamResult } from "./client/useStream";

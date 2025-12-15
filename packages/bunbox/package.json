@@ -24,17 +24,13 @@
     ".": {
       "types": "./src/index.ts",
       "import": {
-        "browser": "./src/browser.ts",
+        "browser": "./src/client.ts",
         "default": "./src/index.ts"
       }
     },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts"
-    },
-    "./browser": {
-      "types": "./src/browser.ts",
-      "import": "./src/browser.ts"
     },
     "./theme": {
       "types": "./src/theme.tsx",
