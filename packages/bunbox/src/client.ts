@@ -11,3 +11,5 @@ export { defineProtocol } from "./client/protocol";
 export type { Protocol } from "./client/protocol";
 export { clearQueryCache, clearQueryCacheKey } from "./client/useQuery";
 export type { UseQueryOptions, UseQueryResult } from "./client/useQuery";
+export { useIsClient } from "./client/useIsClient";
+export { useClientEffect } from "./client/useClientEffect";
