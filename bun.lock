@@ -101,7 +101,7 @@
     },
     "packages/bunbox": {
       "name": "@ademattos/bunbox",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "bin": {
         "bunbox": "./bin/cli.ts",
       },
