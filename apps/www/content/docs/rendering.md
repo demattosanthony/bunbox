@@ -99,6 +99,8 @@ Unlike Next.js App Router, you don't need `"use client"` directives. Every compo
 
 ## Client-Only Code
 
+Client-side utilities live under the `@ademattos/bunbox/client` entrypoint so browser bundles avoid server-only dependencies.
+
 ### Browser APIs and Libraries
 
 Some code can only run in the browser (Three.js, WebGL, `window`, `localStorage`, etc.). Bunbox provides React-native utilities for handling this safely.
@@ -108,7 +110,7 @@ Some code can only run in the browser (Three.js, WebGL, `window`, `localStorage`
 The `useIsClient` hook uses React's `useSyncExternalStore` to detect whether code is running on the client. This is the official React pattern for avoiding hydration mismatches.
 
 ```tsx
-import { useIsClient } from "@ademattos/bunbox";
+import { useIsClient } from "@ademattos/bunbox/client";
 
 export default function BrowserOnly() {
   const isClient = useIsClient();
@@ -127,7 +129,7 @@ export default function BrowserOnly() {
 The `useClientEffect` hook is a convenience wrapper around `useEffect` that only runs on the client, eliminating the need for `typeof window` checks.
 
 ```tsx
-import { useClientEffect } from "@ademattos/bunbox";
+import { useClientEffect } from "@ademattos/bunbox/client";
 import * as THREE from "three";
 
 export default function ThreeScene() {
@@ -185,7 +187,7 @@ export default function App() {
 **localStorage:**
 
 ```tsx
-import { useClientEffect } from "@ademattos/bunbox";
+import { useClientEffect } from "@ademattos/bunbox/client";
 
 function useLocalStorage(key: string, initialValue: string) {
   const [value, setValue] = useState(initialValue);
@@ -206,7 +208,7 @@ function useLocalStorage(key: string, initialValue: string) {
 **Window size:**
 
 ```tsx
-import { useClientEffect } from "@ademattos/bunbox";
+import { useClientEffect } from "@ademattos/bunbox/client";
 
 function useWindowSize() {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -228,7 +230,7 @@ function useWindowSize() {
 **Media queries:**
 
 ```tsx
-import { useClientEffect } from "@ademattos/bunbox";
+import { useClientEffect } from "@ademattos/bunbox/client";
 
 function usePrefersColorScheme() {
   const [scheme, setScheme] = useState<"light" | "dark">("light");

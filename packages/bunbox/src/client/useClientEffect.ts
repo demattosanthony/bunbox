@@ -9,7 +9,7 @@
  *
  * @example
  * ```tsx
- * import { useClientEffect } from "@ademattos/bunbox";
+ * import { useClientEffect } from "@ademattos/bunbox/client";
  * import * as THREE from "three";
  *
  * function ThreeScene() {
@@ -41,7 +41,7 @@
  * @example
  * ```tsx
  * // With localStorage
- * import { useClientEffect } from "@ademattos/bunbox";
+ * import { useClientEffect } from "@ademattos/bunbox/client";
  *
  * function useLocalStorage(key: string, initialValue: string) {
  *   const [value, setValue] = useState(initialValue);
@@ -62,7 +62,7 @@
  * @example
  * ```tsx
  * // With event listeners
- * import { useClientEffect } from "@ademattos/bunbox";
+ * import { useClientEffect } from "@ademattos/bunbox/client";
  *
  * function useWindowSize() {
  *   const [size, setSize] = useState({ width: 0, height: 0 });
