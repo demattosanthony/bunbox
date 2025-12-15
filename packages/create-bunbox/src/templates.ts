@@ -10,7 +10,7 @@ import {
 const TEMPLATES_DIR = join(import.meta.dir, "..", "templates");
 
 // Current bunbox version - update this when releasing
-const BUNBOX_VERSION = "^0.2.6";
+const BUNBOX_VERSION = "^0.3.4";
 
 export async function copyTemplate(
   templateName: string,
