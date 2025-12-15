@@ -185,7 +185,11 @@ export async function transpileForBrowser(
 
   const transpiled = await Bun.build({
     entrypoints,
-    target: "browser",
+    // Use Bun target so build-time helpers (e.g. createRequire) work without
+    // triggering "Browser build cannot import Node.js builtin" errors.
+    // The generated bundle remains ESM and browser-ready, but the build
+    // process can safely use Node/Bun utilities.
+    target: "bun",
     format: "esm",
     minify: options.minify ?? false,
     external: options.external ?? [],
