@@ -9,7 +9,7 @@
  *
  * @example
  * ```tsx
- * import { useIsClient } from "@ademattos/bunbox";
+ * import { useIsClient } from "@ademattos/bunbox/client";
  *
  * function BrowserOnlyComponent() {
  *   const isClient = useIsClient();
@@ -26,7 +26,7 @@
  * @example
  * ```tsx
  * // With Three.js
- * import { useIsClient } from "@ademattos/bunbox";
+ * import { useIsClient } from "@ademattos/bunbox/client";
  * import * as THREE from "three";
  *
  * function ThreeScene() {
