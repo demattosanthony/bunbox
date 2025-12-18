@@ -466,5 +466,7 @@ export async function renderPage(
     )
   );
 
-  return await renderToReadableStream(fullDocument);
+  return await renderToReadableStream(fullDocument, {
+    identifierPrefix: '',
+  });
 }
