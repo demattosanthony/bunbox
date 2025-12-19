@@ -13,6 +13,15 @@ export interface GitConfig {
   token?: string;
 }
 
+export interface MonorepoConfig {
+  /** Disable auto-detection of monorepo (default: false) */
+  disabled?: boolean;
+  /** Additional workspace packages to include beyond auto-detected deps */
+  include?: string[];
+  /** Workspace packages to exclude from transfer */
+  exclude?: string[];
+}
+
 export interface ResolvedGitConfig {
   repo: string;
   branch: string;
@@ -48,6 +57,9 @@ export interface DeployTarget {
 
   // Git deployment (optional - if set, uses git instead of rsync)
   git?: GitConfig;
+
+  // Monorepo configuration (optional - auto-detected by default)
+  monorepo?: MonorepoConfig;
 }
 
 export interface DeployConfig {
@@ -62,6 +74,7 @@ export interface ResolvedTarget extends DeployTarget {
   keepReleases: number;
   exclude: string[];
   git?: ResolvedGitConfig;
+  monorepo?: MonorepoConfig;
 }
 
 /**

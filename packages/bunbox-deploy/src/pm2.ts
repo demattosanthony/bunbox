@@ -7,18 +7,24 @@ import type { ResolvedTarget } from "./config";
 
 /**
  * Generate PM2 ecosystem config
+ * @param appPath - Optional subdirectory for monorepo apps (e.g., "apps/web")
  */
-export function generateEcosystemConfig(target: ResolvedTarget): string {
+export function generateEcosystemConfig(target: ResolvedTarget, appPath?: string): string {
   const envLines = Object.entries(target.env || {})
     .map(([key, value]) => `      ${key}: "${value}",`)
     .join("\n");
+
+  // For monorepos, cwd points to the app subdirectory
+  const cwd = appPath
+    ? `${target.deployPath}/current/${appPath}`
+    : `${target.deployPath}/current`;
 
   return `module.exports = {
   apps: [{
     name: "${target.name}",
     script: "bun",
     args: "run ${target.script}",
-    cwd: "${target.deployPath}/current",
+    cwd: "${cwd}",
     env: {
       PORT: ${target.port},
       NODE_ENV: "production",
@@ -55,16 +61,18 @@ export async function installPM2(ssh: SSHClient): Promise<void> {
 
 /**
  * Setup PM2 for the application
+ * @param appPath - Optional subdirectory for monorepo apps
  */
 export async function setupPM2(
   ssh: SSHClient,
-  target: ResolvedTarget
+  target: ResolvedTarget,
+  appPath?: string
 ): Promise<void> {
   // Create logs directory
   await ssh.exec(`mkdir -p ${target.deployPath}/logs`);
 
   // Generate and upload ecosystem config
-  const config = generateEcosystemConfig(target);
+  const config = generateEcosystemConfig(target, appPath);
   const configPath = `${target.deployPath}/ecosystem.config.js`;
 
   // Write config via echo (simple approach)

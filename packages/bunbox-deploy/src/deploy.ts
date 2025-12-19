@@ -4,7 +4,8 @@
 
 import type { ResolvedTarget } from "./config";
 import { SSHClient } from "./ssh";
-import { transferFiles, checkRsync } from "./transfer";
+import { transferFiles, checkRsync, type TransferResult } from "./transfer";
+import type { WorkspaceInfo } from "./workspace";
 import { isGitInstalled, setupDeployKey, gitSync } from "./git";
 import { setupPM2, startOrReload, isPM2Installed } from "./pm2";
 import {
@@ -113,6 +114,8 @@ export async function deploy(
     spinner.succeed("Release directory ready");
 
     // 4. Transfer files (git clone OR rsync)
+    let workspace: WorkspaceInfo | null = null;
+
     if (useGit && ssh) {
       // Git-based deployment
       spinner.start("Cloning repository...");
@@ -133,12 +136,18 @@ export async function deploy(
       // Rsync-based deployment
       spinner.start("Transferring files...");
       if (!dryRun) {
-        await transferFiles(target, releaseDir, verbose);
+        const result = await transferFiles(target, releaseDir, verbose);
+        workspace = result.workspace;
       }
-      spinner.succeed("Files transferred");
+      if (workspace) {
+        spinner.succeed(`Files transferred (monorepo: ${workspace.appPath})`);
+      } else {
+        spinner.succeed("Files transferred");
+      }
     }
 
     // 5. Install dependencies on server
+    // For monorepos, install at root to resolve workspace dependencies
     if (install && ssh) {
       spinner.start("Installing dependencies...");
       if (!dryRun) {
@@ -151,10 +160,12 @@ export async function deploy(
     }
 
     // 6. Build on server
+    // For monorepos, build in the app subdirectory
     if (build && ssh) {
       spinner.start("Building application...");
       if (!dryRun) {
-        const result = await ssh.exec(`cd ${releaseDir} && bun run build`);
+        const buildDir = workspace ? `${releaseDir}/${workspace.appPath}` : releaseDir;
+        const result = await ssh.exec(`cd ${buildDir} && bun run build`);
         if (result.code !== 0) {
           throw new Error(`Failed to build application: ${result.stderr}`);
         }
@@ -163,12 +174,14 @@ export async function deploy(
     }
 
     // 7. Link shared files (e.g., .env)
+    // For monorepos, link .env to the app subdirectory
     spinner.start("Linking shared files...");
     if (ssh) {
       const sharedEnv = `${target.deployPath}/shared/.env`;
       const hasSharedEnv = await ssh.pathExists(sharedEnv);
       if (hasSharedEnv) {
-        await ssh.exec(`ln -sf ${sharedEnv} ${releaseDir}/.env`);
+        const envTargetDir = workspace ? `${releaseDir}/${workspace.appPath}` : releaseDir;
+        await ssh.exec(`ln -sf ${sharedEnv} ${envTargetDir}/.env`);
       }
     }
     spinner.succeed("Shared files linked");
@@ -181,10 +194,11 @@ export async function deploy(
     spinner.succeed("Release activated");
 
     // 9. Setup and restart PM2
+    // For monorepos, PM2 runs from the app subdirectory
     if (restart && ssh) {
       spinner.start("Configuring PM2...");
       if (!dryRun) {
-        await setupPM2(ssh, target);
+        await setupPM2(ssh, target, workspace?.appPath);
       }
       spinner.succeed("PM2 configured");
 

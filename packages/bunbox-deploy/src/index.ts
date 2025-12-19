@@ -13,6 +13,7 @@ import {
   type DeployConfig,
   type DeployTarget,
   type ResolvedTarget,
+  type MonorepoConfig,
 } from "./config";
 
 import { deploy, rollback, status } from "./deploy";
@@ -24,7 +25,7 @@ import { Spinner, log, printHeader, formatKV } from "./utils";
 
 // Re-export for users
 export { defineDeployConfig };
-export type { DeployConfig, DeployTarget, ResolvedTarget };
+export type { DeployConfig, DeployTarget, ResolvedTarget, MonorepoConfig };
 
 interface CLIOptions {
   positional: string[];

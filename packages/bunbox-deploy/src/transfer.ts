@@ -4,6 +4,7 @@
 
 import { existsSync } from "fs";
 import type { ResolvedTarget } from "./config";
+import { detectWorkspace, type WorkspaceInfo } from "./workspace";
 
 /**
  * Build the application locally
@@ -52,15 +53,21 @@ const DEFAULT_EXCLUDES = [
   "*.local",
 ];
 
+export interface TransferResult {
+  /** Workspace info if deploying from a monorepo */
+  workspace: WorkspaceInfo | null;
+}
+
 /**
  * Transfer files to server using rsync
  * Uses a blacklist approach - transfers everything except excluded patterns
+ * Automatically detects and handles monorepo workspaces
  */
 export async function transferFiles(
   target: ResolvedTarget,
   releaseDir: string,
   verbose?: boolean
-): Promise<void> {
+): Promise<TransferResult> {
   const sshPort = target.sshPort;
   const keyPath = target.privateKey;
 
@@ -69,26 +76,87 @@ export async function transferFiles(
     throw new Error("No package.json found. Is this a Bunbox project?");
   }
 
+  // Detect monorepo workspace (unless disabled)
+  const workspace = target.monorepo?.disabled ? null : detectWorkspace();
+
   // Merge default excludes with user-provided excludes
   const allExcludes = [...new Set([...DEFAULT_EXCLUDES, ...target.exclude])];
 
-  // Build rsync command - transfer entire directory with excludes
-  const rsyncArgs = [
-    "-avz", // archive, verbose, compress
-    "--delete", // remove files not in source
-    "-e",
-    `ssh -i ${keyPath} -p ${sshPort} -o StrictHostKeyChecking=accept-new`,
-    ...allExcludes.map((e) => `--exclude=${e}`),
-    "./", // Transfer entire current directory
-    `${target.username}@${target.host}:${releaseDir}/`,
-  ];
+  let rsyncArgs: string[];
+  let cwd: string;
+
+  if (workspace) {
+    // Monorepo mode: transfer from root with selective includes
+    cwd = workspace.root;
+
+    // Build include list: root files + app + required packages
+    const includes: string[] = [
+      "package.json",
+      "bun.lock",
+      "bun.lockb",
+      workspace.appPath,
+      `${workspace.appPath}/**`,
+    ];
+
+    // Add required workspace packages
+    for (const pkg of workspace.requiredPackages) {
+      includes.push(pkg);
+      includes.push(`${pkg}/**`);
+    }
+
+    // Add user-specified additional packages
+    if (target.monorepo?.include) {
+      for (const pkg of target.monorepo.include) {
+        includes.push(pkg);
+        includes.push(`${pkg}/**`);
+      }
+    }
+
+    // Filter out excluded packages
+    const excludedPkgs = target.monorepo?.exclude || [];
+
+    rsyncArgs = [
+      "-avz",
+      "--delete",
+      "-e",
+      `ssh -i ${keyPath} -p ${sshPort} -o StrictHostKeyChecking=accept-new`,
+      // Use include/exclude pattern for selective transfer
+      "--include=*/", // Include all directories (needed for rsync to traverse)
+      ...includes.map((i) => `--include=${i}`),
+      ...excludedPkgs.map((e) => `--exclude=${e}`),
+      ...excludedPkgs.map((e) => `--exclude=${e}/**`),
+      ...allExcludes.map((e) => `--exclude=${e}`),
+      "--exclude=*", // Exclude everything else at root
+      "./",
+      `${target.username}@${target.host}:${releaseDir}/`,
+    ];
+
+    if (verbose) {
+      console.log(`  Monorepo detected: ${workspace.root}`);
+      console.log(`  App path: ${workspace.appPath}`);
+      console.log(`  Required packages: ${workspace.requiredPackages.join(", ") || "(none)"}`);
+    }
+  } else {
+    // Standard mode: transfer current directory
+    cwd = process.cwd();
+
+    rsyncArgs = [
+      "-avz",
+      "--delete",
+      "-e",
+      `ssh -i ${keyPath} -p ${sshPort} -o StrictHostKeyChecking=accept-new`,
+      ...allExcludes.map((e) => `--exclude=${e}`),
+      "./",
+      `${target.username}@${target.host}:${releaseDir}/`,
+    ];
+  }
 
   if (verbose) {
     console.log(`  rsync ${rsyncArgs.join(" ")}`);
   }
 
   const proc = Bun.spawn(["rsync", ...rsyncArgs], {
-    cwd: process.cwd(),
+    cwd,
     stdout: verbose ? "inherit" : "pipe",
     stderr: "pipe",
   });
@@ -99,6 +167,8 @@ export async function transferFiles(
     const stderr = await new Response(proc.stderr).text();
     throw new Error(`File transfer failed: ${stderr}`);
   }
+
+  return { workspace };
 }
 
 /**
