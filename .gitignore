@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .bunbox/
+!**/.bunbox/api-client.ts
 
 # Build output
 dist/

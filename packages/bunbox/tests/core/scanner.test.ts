@@ -9,9 +9,8 @@ import { tmpdir } from "os";
 import {
   scanPageRoutes,
   scanApiRoutes,
-  scanSocketRoutes,
+  scanWsRoutes,
   scanLayouts,
-  scanWorker,
 } from "../../src/core/scanner";
 
 describe("scanner", () => {
@@ -221,52 +220,52 @@ describe("scanner", () => {
     });
   });
 
-  describe("scanSocketRoutes", () => {
-    test("finds route.ts files in sockets directory", async () => {
-      const socketsDir = join(tempDir, "sockets");
-      await mkdir(join(socketsDir, "chat"), { recursive: true });
+  describe("scanWsRoutes", () => {
+    test("finds route.ts files in ws directory", async () => {
+      const wsDir = join(tempDir, "ws");
+      await mkdir(join(wsDir, "chat"), { recursive: true });
       await writeFile(
-        join(socketsDir, "chat", "route.ts"),
-        "export const onJoin = () => {}"
+        join(wsDir, "chat", "route.ts"),
+        "export const onOpen = () => {}"
       );
 
-      const routes = await scanSocketRoutes(socketsDir);
+      const routes = await scanWsRoutes(wsDir);
 
       expect(routes.length).toBe(1);
-      expect(routes[0]?.filepath).toBe("sockets/chat/route.ts");
-      expect(routes[0]?.type).toBe("socket");
+      expect(routes[0]?.filepath).toBe("ws/chat/route.ts");
+      expect(routes[0]?.type).toBe("ws");
     });
 
-    test("finds nested socket routes", async () => {
-      const socketsDir = join(tempDir, "sockets");
-      await mkdir(join(socketsDir, "rooms", "chat"), { recursive: true });
+    test("finds nested ws routes", async () => {
+      const wsDir = join(tempDir, "ws");
+      await mkdir(join(wsDir, "rooms", "chat"), { recursive: true });
       await writeFile(
-        join(socketsDir, "rooms", "chat", "route.ts"),
-        "export const onJoin = () => {}"
+        join(wsDir, "rooms", "chat", "route.ts"),
+        "export const onOpen = () => {}"
       );
 
-      const routes = await scanSocketRoutes(socketsDir);
+      const routes = await scanWsRoutes(wsDir);
 
       expect(routes.length).toBe(1);
-      expect(routes[0]?.filepath).toBe("sockets/rooms/chat/route.ts");
+      expect(routes[0]?.filepath).toBe("ws/rooms/chat/route.ts");
     });
 
-    test("finds dynamic socket routes", async () => {
-      const socketsDir = join(tempDir, "sockets");
-      await mkdir(join(socketsDir, "rooms", "[roomId]"), { recursive: true });
+    test("finds dynamic ws routes", async () => {
+      const wsDir = join(tempDir, "ws");
+      await mkdir(join(wsDir, "rooms", "[roomId]"), { recursive: true });
       await writeFile(
-        join(socketsDir, "rooms", "[roomId]", "route.ts"),
-        "export const onJoin = () => {}"
+        join(wsDir, "rooms", "[roomId]", "route.ts"),
+        "export const onOpen = () => {}"
       );
 
-      const routes = await scanSocketRoutes(socketsDir);
+      const routes = await scanWsRoutes(wsDir);
 
       expect(routes.length).toBe(1);
       expect(routes[0]?.paramNames).toEqual(["roomId"]);
     });
 
     test("returns empty array when directory doesn't exist", async () => {
-      const routes = await scanSocketRoutes(join(tempDir, "nonexistent"));
+      const routes = await scanWsRoutes(join(tempDir, "nonexistent"));
 
       expect(routes).toEqual([]);
     });
@@ -344,93 +343,30 @@ describe("scanner", () => {
     });
   });
 
-  describe("scanWorker", () => {
-    test("finds worker.ts file", async () => {
-      await writeFile(
-        join(tempDir, "worker.ts"),
-        "export default async function() {}"
-      );
-
-      const worker = await scanWorker(tempDir);
-
-      expect(worker).toBe("worker.ts");
-    });
-
-    test("finds worker.tsx file", async () => {
-      await writeFile(
-        join(tempDir, "worker.tsx"),
-        "export default async function() {}"
-      );
-
-      const worker = await scanWorker(tempDir);
-
-      expect(worker).toBe("worker.tsx");
-    });
-
-    test("finds worker.js file", async () => {
-      await writeFile(
-        join(tempDir, "worker.js"),
-        "export default async function() {}"
-      );
-
-      const worker = await scanWorker(tempDir);
-
-      expect(worker).toBe("worker.js");
-    });
-
-    test("finds worker.jsx file", async () => {
-      await writeFile(
-        join(tempDir, "worker.jsx"),
-        "export default async function() {}"
-      );
-
-      const worker = await scanWorker(tempDir);
-
-      expect(worker).toBe("worker.jsx");
-    });
-
-    test("returns null when worker doesn't exist", async () => {
-      const worker = await scanWorker(tempDir);
-
-      expect(worker).toBeNull();
-    });
-
-    test("prioritizes .ts over other extensions", async () => {
-      await writeFile(join(tempDir, "worker.ts"), "");
-      await writeFile(join(tempDir, "worker.js"), "");
-
-      const worker = await scanWorker(tempDir);
-
-      expect(worker).toBe("worker.ts");
-    });
-  });
-
   describe("integration", () => {
     test("scans complete app structure", async () => {
       // Create a realistic app structure
       await mkdir(join(tempDir, "api", "users"), { recursive: true });
       await mkdir(join(tempDir, "blog", "[slug]"), { recursive: true });
-      await mkdir(join(tempDir, "sockets", "chat"), { recursive: true });
+      await mkdir(join(tempDir, "ws", "chat"), { recursive: true });
 
       await writeFile(join(tempDir, "layout.tsx"), "");
       await writeFile(join(tempDir, "page.tsx"), "");
       await writeFile(join(tempDir, "blog", "[slug]", "page.tsx"), "");
       await writeFile(join(tempDir, "api", "users", "route.ts"), "");
-      await writeFile(join(tempDir, "worker.ts"), "");
+      await writeFile(join(tempDir, "ws", "chat", "route.ts"), "");
 
-      const [pages, apis, sockets, layouts, worker] = await Promise.all([
+      const [pages, apis, ws, layouts] = await Promise.all([
         scanPageRoutes(tempDir),
         scanApiRoutes(tempDir),
-        scanSocketRoutes(join(tempDir, "sockets")),
+        scanWsRoutes(join(tempDir, "ws")),
         scanLayouts(tempDir),
-        scanWorker(tempDir),
       ]);
 
       expect(pages.length).toBe(2);
       expect(apis.length).toBe(1);
-      expect(sockets.length).toBe(0); // No socket routes created
+      expect(ws.length).toBe(1);
       expect(layouts.size).toBe(1);
-      expect(worker).toBe("worker.ts");
     });
 
     test("handles mixed file extensions", async () => {

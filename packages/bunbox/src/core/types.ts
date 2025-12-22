@@ -125,7 +125,7 @@ export interface Route {
   pattern: RegExp;
   filepath: string;
   paramNames: string[];
-  type: "page" | "api" | "ws" | "socket";
+  type: "page" | "api" | "ws";
 }
 
 /**
@@ -221,14 +221,6 @@ export type WebSocketData =
       ctx: WebSocketContext;
       /** Custom data from upgrade function */
       data?: unknown;
-    }
-  | {
-      type: "socket";
-      route: string;
-      topic: string;
-      user: SocketUser;
-      handler: SocketRouteModule;
-      ctx: SocketContext;
     };
 
 /**
@@ -323,93 +315,13 @@ export type LayoutModules = Record<
 >;
 
 /**
- * Socket user with server-assigned ID and custom data
- */
-export interface SocketUser {
-  /** Server-assigned unique user ID */
-  id: string;
-  /** Custom user data */
-  data: RouteExtras;
-}
-
-/**
- * Structured socket message
- */
-export interface SocketMessage<T = unknown> {
-  /** Message type identifier */
-  type: string;
-  /** Message payload */
-  data: T;
-  /** Server timestamp */
-  timestamp: number;
-  /** Sender's user ID */
-  userId: string;
-}
-
-/**
- * Socket context passed to socket route handlers
- * Provides methods for broadcasting and user management
- */
-export interface SocketContext {
-  /** Broadcast message to all connected users */
-  broadcast<T = unknown>(type: string, data: T): void;
-  /** Send message to specific user */
-  sendTo<T = unknown>(userId: string, type: string, data: T): void;
-  /** Get all connected users */
-  getUsers(): SocketUser[];
-}
-
-/**
- * Socket route module with handler exports
- */
-export interface SocketRouteModule {
-  /** Called when a user joins the socket */
-  onJoin?: (user: SocketUser, ctx: SocketContext) => void | Promise<void>;
-  /** Called when a user leaves the socket */
-  onLeave?: (user: SocketUser, ctx: SocketContext) => void | Promise<void>;
-  /** Called when a user sends a message */
-  onMessage?: (
-    user: SocketUser,
-    message: SocketMessage,
-    ctx: SocketContext
-  ) => void | Promise<void>;
-  /** Optional authorization check before connection */
-  onAuthorize?: (
-    req: Request,
-    userData: Record<string, string>
-  ) => boolean | Promise<boolean>;
-}
-
-/**
- * Worker cleanup function returned by worker
- */
-export interface WorkerCleanup {
-  close?: () => void | Promise<void>;
-}
-
-/**
- * Worker module with default export function
- * Used for background tasks like socket clients
- *
- * The worker function can return a cleanup object with a `close` method
- * that will be called on shutdown or hot reload.
- */
-export interface WorkerModule {
-  default?: () => void | Promise<void> | WorkerCleanup | Promise<WorkerCleanup>;
-}
-
-/**
  * Server configuration returned by buildServerConfig
- * Extends Bun.serve() configuration with additional Bunbox-specific properties
  */
 export interface BunboxServerConfig {
   port: number;
   hostname: string;
   routes: Record<string, RouteHandlers>;
-  workerOnly: boolean;
-  workerPath: string | null;
-  startWorkerAfterListen: () => Promise<void>;
-  workerCleanup: () => Promise<void>;
+  readyMessage: string;
   fetch: (
     req: Request,
     server: Server<WebSocketData>
@@ -445,54 +357,3 @@ export interface SSEResponse<T> extends Response {
   readonly __type: T;
 }
 
-// ============================================================================
-// Job System Types
-// ============================================================================
-
-/**
- * Job configuration for defining scheduled or triggered jobs
- * @template T - The type of data passed to the job's run function
- */
-export interface JobConfig<T = unknown> {
-  /**
-   * Cron schedule expression (5-field format)
-   * Format: "minute hour day-of-month month day-of-week"
-   * Examples: "0 * * * *" (hourly), "0 3 * * *" (daily at 3am)
-   */
-  schedule?: string;
-
-  /**
-   * Simple interval for job execution
-   * Format: number followed by unit (s, m, h, d)
-   * Examples: "30s", "5m", "1h", "1d"
-   * Cannot be used with `schedule`
-   */
-  interval?: string;
-
-  /**
-   * The job handler function
-   * @param data - Data passed when triggering the job (optional for scheduled jobs)
-   */
-  run: (data: T) => void | Promise<void>;
-}
-
-/**
- * Job module with default export
- */
-export interface JobModule<T = unknown> {
-  default: JobConfig<T>;
-}
-
-/**
- * Internal job instance tracked by JobManager
- */
-export interface JobInstance<T = unknown> {
-  /** Job name derived from filename */
-  name: string;
-  /** Job configuration */
-  config: JobConfig<T>;
-  /** File path for hot reload */
-  path: string;
-  /** Active timer reference (for cleanup) */
-  timer?: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval>;
-}

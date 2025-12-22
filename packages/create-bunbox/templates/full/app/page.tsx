@@ -16,7 +16,6 @@ export default function Home() {
       >
         <a href="/about">About</a>
         <a href="/stream-demo">Streaming Demo</a>
-        <a href="/chat">WebSockets</a>
         <a href="/api/health">Health API</a>
         <a
           href="https://github.com/demattosanthony/bunbox"
@@ -29,7 +28,9 @@ export default function Home() {
 
       <div className="details">
         <p>Built with React, TypeScript, and Bun</p>
-        <p>Edit <code>app/page.tsx</code> to get started</p>
+        <p>
+          Edit <code>app/page.tsx</code> to get started
+        </p>
       </div>
     </div>
   );

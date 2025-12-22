@@ -7,7 +7,8 @@
     "dev": "bunbox dev",
     "build": "bunbox build",
     "start": "bunbox start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf node_modules && rm -rf .bunbox"
   },
   "dependencies": {
     "@ademattos/bunbox": "workspace:*",
@@ -27,6 +28,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",
     "autoprefixer": "^10.4.22",
     "bun-plugin-tailwind": "^0.1.2",

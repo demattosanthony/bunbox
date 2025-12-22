@@ -1,16 +1,9 @@
 /**
- * WebSocket and Socket context implementations
- * Extracted from server.ts for better modularity
+ * WebSocket context implementation
  */
 
 import type { Server } from "bun";
-import type {
-  WebSocketData,
-  WebSocketContext,
-  SocketContext,
-  SocketUser,
-  SocketMessage,
-} from "../types";
+import type { WebSocketData, WebSocketContext } from "../types";
 
 /**
  * WebSocket context implementation
@@ -31,48 +24,5 @@ export class WebSocketContextImpl implements WebSocketContext {
 
   broadcastJSON(data: unknown, compress?: boolean): number {
     return this.server.publish(this.topic, JSON.stringify(data), compress);
-  }
-}
-
-/**
- * Socket context implementation
- * Provides methods for socket route handlers
- */
-export class SocketContextImpl implements SocketContext {
-  constructor(
-    private readonly topic: string,
-    private readonly server: Server<WebSocketData>,
-    private readonly users: Map<string, SocketUser>
-  ) {}
-
-  broadcast<T = unknown>(type: string, data: T): void {
-    const message: SocketMessage<T> = {
-      type,
-      data,
-      timestamp: Date.now(),
-      userId: "",
-    };
-    this.server.publish(this.topic, JSON.stringify(message));
-  }
-
-  sendTo<T = unknown>(userId: string, type: string, data: T): void {
-    // Send to a specific user by iterating through subscriptions
-    // Note: This is a simple implementation. For large scale, consider a userId->ws map
-    const message: SocketMessage<T> = {
-      type,
-      data,
-      timestamp: Date.now(),
-      userId,
-    };
-
-    const user = this.users.get(userId);
-    if (user) {
-      // Publish to a user-specific topic (requires manual subscription)
-      this.server.publish(`socket-user-${userId}`, JSON.stringify(message));
-    }
-  }
-
-  getUsers(): SocketUser[] {
-    return Array.from(this.users.values());
   }
 }

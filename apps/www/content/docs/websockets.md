@@ -7,7 +7,7 @@ category: Real-time
 
 ## Creating a WebSocket Route
 
-Create a WebSocket route in `app/ws/` (note: different from `app/sockets/`):
+Create a WebSocket route in `app/ws/`:
 
 ```typescript
 // app/ws/custom/route.ts
@@ -322,12 +322,7 @@ Use WebSocket routes (`app/ws/`) when you need:
 - Low-level control over messages
 - Integration with existing WebSocket clients
 - Performance-critical applications
-
-For most cases, use [Socket routes](/docs/sockets) instead, which provide:
-- Type-safe protocols
-- Structured messages
-- Easier client integration
-- Better DX with `useSocket` hook
+- Real-time chat, games, or live updates
 
 ## Debugging
 

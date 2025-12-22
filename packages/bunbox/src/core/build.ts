@@ -9,9 +9,8 @@ import type { ResolvedBunboxConfig } from "./config";
 import {
   scanPageRoutes,
   scanApiRoutes,
-  scanSocketRoutes,
+  scanWsRoutes,
   scanLayouts,
-  scanWorker,
 } from "./scanner";
 import { generateRoutesFile, generateApiClient } from "./generator";
 import {
@@ -32,7 +31,7 @@ export interface BuildMetadata {
   routes: {
     pages: number;
     apis: number;
-    sockets: number;
+    ws: number;
     layouts: number;
   };
   bundleSize: number;
@@ -54,20 +53,17 @@ export async function buildForProduction(
   console.log(" ○ Scanning routes...");
 
   // Scan all routes and layouts
-  const [pageRoutes, apiRoutes, socketRoutes, layouts, workerPath] =
-    await Promise.all([
-      scanPageRoutes(config.appDir),
-      scanApiRoutes(config.appDir),
-      scanSocketRoutes(config.socketsDir),
-      scanLayouts(config.appDir),
-      scanWorker(config.appDir),
-    ]);
+  const [pageRoutes, apiRoutes, wsRoutes, layouts] = await Promise.all([
+    scanPageRoutes(config.appDir),
+    scanApiRoutes(config.appDir),
+    scanWsRoutes(config.wsDir),
+    scanLayouts(config.appDir),
+  ]);
 
-  const totalRoutes =
-    pageRoutes.length + apiRoutes.length + socketRoutes.length;
+  const totalRoutes = pageRoutes.length + apiRoutes.length + wsRoutes.length;
 
   console.log(
-    ` ✓ Found ${totalRoutes} routes (${pageRoutes.length} pages, ${apiRoutes.length} APIs, ${socketRoutes.length} sockets)`
+    ` ✓ Found ${totalRoutes} routes (${pageRoutes.length} pages, ${apiRoutes.length} APIs, ${wsRoutes.length} ws)`
   );
 
   // Create .bunbox directory
@@ -178,7 +174,7 @@ export async function buildForProduction(
     routes: {
       pages: pageRoutes.length,
       apis: apiRoutes.length,
-      sockets: socketRoutes.length,
+      ws: wsRoutes.length,
       layouts: layouts.size,
     },
     bundleSize,

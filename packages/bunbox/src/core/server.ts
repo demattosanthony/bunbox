@@ -5,10 +5,6 @@
 import { join } from "path";
 import type { ResolvedBunboxConfig, ResolvedCorsConfig } from "./config";
 import {
-  createOpenAPIHandler,
-  createSwaggerUIHandler,
-} from "./openapi/runtime";
-import {
   getRequestUrl,
   matchRoute,
   sortRoutes,
@@ -18,13 +14,9 @@ import {
   scanPageRoutes,
   scanApiRoutes,
   scanWsRoutes,
-  scanSocketRoutes,
   scanLayouts,
   scanMiddleware,
-  scanWorker,
-  scanJobs,
 } from "./scanner";
-import { jobManager } from "./jobs";
 import { ApiError, ValidationError, errors } from "./errors";
 import { renderPage } from "./ssr";
 import { generateRoutesFile, generateApiClient } from "./generator";
@@ -46,7 +38,8 @@ import {
   findAllCssFiles,
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
-import { WebSocketContextImpl, SocketContextImpl } from "./server/contexts";
+import { WebSocketContextImpl } from "./server/contexts";
+import { openapi, type OpenAPIPlugin } from "../openapi";
 import type { BunFile, Server } from "bun";
 import type {
   Route,
@@ -61,11 +54,6 @@ import type {
   PageModule,
   LayoutModule,
   MiddlewareModule,
-  SocketRouteModule,
-  SocketUser,
-  SocketMessage,
-  WorkerModule,
-  WorkerCleanup,
   BunboxServerConfig,
 } from "./types";
 
@@ -186,130 +174,89 @@ class BunboxServer {
   private pageRoutes: Route[] = [];
   private apiRoutes: Route[] = [];
   private wsRoutes: Route[] = [];
-  private socketRoutes: Route[] = [];
   private layouts: Map<string, string> = new Map();
   private middleware: Map<string, string> = new Map();
   private wsHandlers: Map<string, WsRouteModule> = new Map();
-  private socketHandlers: Map<string, SocketRouteModule> = new Map();
-  private socketUsers: Map<string, Map<string, SocketUser>> = new Map(); // topic -> userId -> user
   private rootLayoutPath: string | null = null;
   private cachedMetadata: PageMetadata | null = null;
   private hmrClients: Set<ServerWebSocket> = new Set();
   private watcher: { close: () => void } | null = null;
   private server: Server<WebSocketData> | null = null;
-  private workerPath: string | null = null;
-  private workerInstance: WorkerCleanup | void | null = null;
-  private jobFiles: string[] = [];
   private buildMetadata: BuildMetadata | null = null;
+  private openapiPlugin: OpenAPIPlugin | null = null;
 
   constructor(config: ResolvedBunboxConfig) {
     this.config = config;
+
+    // Initialize OpenAPI plugin if configured
+    if (config.openapi) {
+      this.openapiPlugin = openapi(config.openapi);
+    }
   }
 
   /**
    * Initialize the server by scanning routes
-   * Returns ready message info instead of printing it
    */
-  async init(): Promise<{ isWorkerOnly: boolean; readyMessage: string }> {
+  async init(): Promise<{ readyMessage: string }> {
     const startTime = Date.now();
 
     // Register asset plugin for runtime imports (SSR)
     // Must be called before any page/layout modules are imported
     registerAssetPlugin();
 
-    // Scan for worker file first
-    this.workerPath = await scanWorker(this.config.appDir);
-
-    // Scan for job files
-    this.jobFiles = await scanJobs(this.config.appDir);
-
-    // Initialize job manager
-    jobManager.init(this.config.appDir, this.config.development);
-
-    // Scan all route types (needed to determine worker-only mode)
+    // Scan all route types
     this.pageRoutes = sortRoutes(await scanPageRoutes(this.config.appDir));
     this.apiRoutes = sortRoutes(await scanApiRoutes(this.config.appDir));
     this.wsRoutes = sortRoutes(await scanWsRoutes(this.config.wsDir));
-    this.socketRoutes = sortRoutes(
-      await scanSocketRoutes(this.config.socketsDir)
-    );
 
-    const isWorkerOnly =
-      this.workerPath !== null &&
-      this.pageRoutes.length === 0 &&
-      this.apiRoutes.length === 0 &&
-      this.wsRoutes.length === 0 &&
-      this.socketRoutes.length === 0;
+    this.layouts = await scanLayouts(this.config.appDir);
+    this.middleware = await scanMiddleware(this.config.appDir);
 
-    // Skip HTTP-related initialization in worker-only mode
-    if (!isWorkerOnly) {
-      this.layouts = await scanLayouts(this.config.appDir);
-      this.middleware = await scanMiddleware(this.config.appDir);
+    // Check for pre-built artifacts in production
+    const useBuildArtifacts =
+      !this.config.development && (await hasBuildArtifacts());
 
-      // Check for pre-built artifacts in production
-      const useBuildArtifacts =
-        !this.config.development && (await hasBuildArtifacts());
-
-      if (useBuildArtifacts) {
-        this.buildMetadata = await getBuildMetadata();
-        if (this.buildMetadata) {
-          console.log(
-            ` ○ Using pre-built artifacts (${this.buildMetadata.routes.pages} pages, ${this.buildMetadata.routes.apis} APIs)`
-          );
-        }
-      } else {
-        // Generate routes file for client-side hydration
-        await generateRoutesFile(this.config.appDir);
-
-        // Generate typed API client
-        await generateApiClient(this.config.appDir, this.config);
+    if (useBuildArtifacts) {
+      this.buildMetadata = await getBuildMetadata();
+      if (this.buildMetadata) {
+        console.log(
+          ` ○ Using pre-built artifacts (${this.buildMetadata.routes.pages} pages, ${this.buildMetadata.routes.apis} APIs)`
+        );
       }
+    } else {
+      // Generate routes file for client-side hydration
+      await generateRoutesFile(this.config.appDir);
 
-      // Load WebSocket handlers in production
-      if (!this.config.development) {
-        for (const route of this.wsRoutes) {
-          const path = join(this.config.appDir, route.filepath);
-          const handler = await dynamicImport<WsRouteModule>(
-            resolveAbsolutePath(path),
-            false
-          );
-          this.wsHandlers.set(route.filepath, handler);
-        }
-        for (const route of this.socketRoutes) {
-          const path = join(this.config.appDir, route.filepath);
-          const handler = await dynamicImport<SocketRouteModule>(
-            resolveAbsolutePath(path),
-            false
-          );
-          this.socketHandlers.set(route.filepath, handler);
-        }
-      }
+      // Generate typed API client
+      await generateApiClient(this.config.appDir, this.config);
+    }
 
-      // Load and cache metadata from root layout
-      if (this.layouts.has("/")) {
-        this.rootLayoutPath = join(this.config.appDir, this.layouts.get("/")!);
-        this.cachedMetadata = await this.loadMetadata();
+    // Load WebSocket handlers in production
+    if (!this.config.development) {
+      for (const route of this.wsRoutes) {
+        const path = join(this.config.wsDir, route.filepath);
+        const handler = await dynamicImport<WsRouteModule>(
+          resolveAbsolutePath(path),
+          false
+        );
+        this.wsHandlers.set(route.filepath, handler);
       }
     }
 
-    // Worker starts after server is listening (see startWorkerAfterListen)
+    // Load and cache metadata from root layout
+    if (this.layouts.has("/")) {
+      this.rootLayoutPath = join(this.config.appDir, this.layouts.get("/")!);
+      this.cachedMetadata = await this.loadMetadata();
+    }
 
     const duration = Date.now() - startTime;
     const totalRoutes =
-      this.pageRoutes.length +
-      this.apiRoutes.length +
-      this.wsRoutes.length +
-      this.socketRoutes.length;
+      this.pageRoutes.length + this.apiRoutes.length + this.wsRoutes.length;
 
-    // Return ready message info instead of printing
-    let readyMessage: string;
-    if (isWorkerOnly) {
-      readyMessage = ` ✓ Worker ready in ${duration}ms`;
-    } else if (totalRoutes > 0) {
-      readyMessage = ` ✓ Ready in ${duration}ms (${totalRoutes} routes)`;
-    } else {
-      readyMessage = ` ✓ Ready in ${duration}ms`;
-    }
+    const readyMessage =
+      totalRoutes > 0
+        ? ` ✓ Ready in ${duration}ms (${totalRoutes} routes)`
+        : ` ✓ Ready in ${duration}ms`;
 
     // Set up file watcher in development mode
     if (this.config.development) {
@@ -319,53 +266,7 @@ class BunboxServer {
       });
     }
 
-    return {
-      isWorkerOnly,
-      readyMessage,
-    };
-  }
-
-  /**
-   * Start worker process
-   */
-  private async startWorker() {
-    if (!this.workerPath) return;
-
-    const workerFullPath = join(this.config.appDir, this.workerPath);
-    const absolutePath = resolveAbsolutePath(workerFullPath);
-
-    try {
-      const module = await dynamicImport<WorkerModule>(
-        absolutePath,
-        this.config.development
-      );
-
-      if (module.default) {
-        this.workerInstance = await module.default();
-        if (this.config.development) {
-          console.log(" ○ Worker started");
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to start worker: ${getErrorMessage(error)}`);
-    }
-  }
-
-  /**
-   * Stop worker process
-   */
-  private async stopWorker() {
-    if (this.workerInstance) {
-      // If worker instance has a cleanup method, call it
-      if (typeof this.workerInstance?.close === "function") {
-        try {
-          await this.workerInstance.close();
-        } catch (error) {
-          // Ignore cleanup errors
-        }
-      }
-      this.workerInstance = null;
-    }
+    return { readyMessage };
   }
 
   /**
@@ -381,20 +282,6 @@ class BunboxServer {
   private async handleFileChange() {
     const startTime = Date.now();
     console.log(" ○ Reloading...");
-
-    // Restart worker if exists
-    if (this.workerPath) {
-      await this.stopWorker();
-      await this.startWorker();
-    }
-
-    // Reload jobs
-    if (this.jobFiles.length > 0) {
-      jobManager.clear();
-      this.jobFiles = await scanJobs(this.config.appDir);
-      await jobManager.loadJobs(this.jobFiles);
-      jobManager.startScheduledJobs();
-    }
 
     // Send reload message to all connected HMR clients
     if (this.hmrClients.size > 0) {
@@ -752,24 +639,14 @@ class BunboxServer {
       routes["/__bunbox/styles.css"] = this.buildStylesRoute();
     }
 
-    // Add OpenAPI documentation routes if enabled
-    if (this.config.openapi?.enabled) {
-      const basePath = this.config.openapi.path;
-      const specPath = `${basePath}/openapi.json`;
-
-      // Swagger UI endpoint
-      routes[basePath] = {
-        GET: this.wrapWithCors(
-          createSwaggerUIHandler(specPath, this.config.openapi)
-        ),
-      };
-
-      // OpenAPI JSON spec endpoint
-      routes[specPath] = {
-        GET: this.wrapWithCors(
-          createOpenAPIHandler(this.config.appDir, this.config.openapi)
-        ),
-      };
+    // Build OpenAPI routes if configured
+    if (this.openapiPlugin) {
+      const openapiRoutes = this.openapiPlugin.getRoutes(this.config.appDir);
+      for (const route of openapiRoutes) {
+        routes[route.path] = {
+          GET: async () => route.handler(),
+        };
+      }
     }
 
     const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
@@ -1249,26 +1126,7 @@ class BunboxServer {
       port: this.config.port,
       hostname: this.config.hostname,
       routes,
-      workerOnly: initResult.isWorkerOnly,
       readyMessage: initResult.readyMessage,
-      workerPath: this.workerPath,
-      startWorkerAfterListen: async () => {
-        // Start worker if exists
-        if (this.workerPath) await this.startWorker();
-
-        // Load and start scheduled jobs
-        if (this.jobFiles.length > 0) {
-          await jobManager.loadJobs(this.jobFiles);
-          jobManager.startScheduledJobs();
-        }
-      },
-      workerCleanup: async () => {
-        // Stop all jobs
-        jobManager.stopAll();
-
-        // Stop worker
-        await this.stopWorker();
-      },
 
       fetch: async (req: Request, server: Server<WebSocketData>) => {
         // Store server reference on first call
@@ -1291,11 +1149,6 @@ class BunboxServer {
           return this.handleWebSocketUpgrade(req, server);
         }
 
-        // Handle Socket routes
-        if (url.pathname.startsWith("/sockets/")) {
-          return this.handleSocketUpgrade(req, server);
-        }
-
         return new Response("Not Found", { status: 404 });
       },
 
@@ -1308,18 +1161,6 @@ class BunboxServer {
             return;
           }
 
-          if (data.type === "socket") {
-            ws.subscribe(data.topic);
-            ws.subscribe(`socket-user-${data.user.id}`);
-
-            if (!this.socketUsers.has(data.topic)) {
-              this.socketUsers.set(data.topic, new Map());
-            }
-            this.socketUsers.get(data.topic)!.set(data.user.id, data.user);
-            data.handler.onJoin?.(data.user, data.ctx);
-            return;
-          }
-
           // WebSocket connection
           ws.subscribe(data.topic);
           data.handler.onOpen?.(ws, data.ctx);
@@ -1329,26 +1170,6 @@ class BunboxServer {
 
           if (data.type === "hmr") return;
 
-          if (data.type === "socket") {
-            // Parse socket message
-            try {
-              const parsed =
-                typeof message === "string" ? JSON.parse(message) : message;
-              const socketMessage: SocketMessage = {
-                type: parsed.type,
-                data: parsed.data,
-                timestamp: Date.now(),
-                userId: data.user.id,
-              };
-              data.handler.onMessage?.(data.user, socketMessage, data.ctx);
-            } catch (error) {
-              console.error(
-                `Failed to parse socket message: ${getErrorMessage(error)}`
-              );
-            }
-            return;
-          }
-
           // WebSocket message
           data.handler.onMessage?.(ws, message, data.ctx);
         },
@@ -1357,21 +1178,6 @@ class BunboxServer {
 
           if (data.type === "hmr") {
             this.hmrClients.delete(ws);
-            return;
-          }
-
-          if (data.type === "socket") {
-            // Remove user from socket users
-            const users = this.socketUsers.get(data.topic);
-            if (users) {
-              users.delete(data.user.id);
-              if (users.size === 0) {
-                this.socketUsers.delete(data.topic);
-              }
-            }
-
-            // Call user's onLeave handler
-            data.handler.onLeave?.(data.user, data.ctx);
             return;
           }
 
@@ -1434,74 +1240,6 @@ class BunboxServer {
     }
 
     return new Response("WebSocket route not found", { status: 404 });
-  }
-
-  /**
-   * Handle Socket upgrade request
-   */
-  private async handleSocketUpgrade(
-    req: Request,
-    server: Server<WebSocketData>
-  ): Promise<Response | undefined> {
-    for (const route of this.socketRoutes) {
-      const match = matchRoute(req, route);
-      if (!match) continue;
-
-      const handler = this.config.development
-        ? await dynamicImport<SocketRouteModule>(
-            resolveAbsolutePath(join(this.config.appDir, route.filepath)),
-            true
-          )
-        : this.socketHandlers.get(route.filepath);
-      if (!handler) continue;
-
-      const topic = getTopicFromRoute(route.filepath);
-
-      // Extract user data from URL query parameters
-      const url = getRequestUrl(req);
-      const userData: Record<string, string> = {};
-
-      // Add all query params as user data
-      url.searchParams.forEach((value, key) => {
-        userData[key] = value;
-      });
-
-      // Check for authorization
-      if (handler.onAuthorize) {
-        const authorized = await handler.onAuthorize(req, userData);
-        if (!authorized) {
-          return new Response("Unauthorized", { status: 401 });
-        }
-      }
-
-      // Generate unique user ID
-      const userId = crypto.randomUUID();
-      const user: SocketUser = {
-        id: userId,
-        data: userData,
-      };
-
-      // Create or get users map for this topic
-      if (!this.socketUsers.has(topic)) {
-        this.socketUsers.set(topic, new Map());
-      }
-      const users = this.socketUsers.get(topic)!;
-
-      // Create context and upgrade connection
-      const ctx = new SocketContextImpl(topic, server, users);
-      const socketData: WebSocketData = {
-        type: "socket",
-        route: route.filepath,
-        topic,
-        user,
-        handler,
-        ctx,
-      };
-
-      if (server.upgrade(req, { data: socketData })) return;
-    }
-
-    return new Response("Socket route not found", { status: 404 });
   }
 }
 

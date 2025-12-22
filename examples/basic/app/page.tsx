@@ -15,9 +15,8 @@ export default function Home() {
         }}
       >
         <a href="/about">About</a>
-        <a href="/users">useQuery Demo</a>
-        <a href="/stream-demo">Streaming Demo</a>
-        <a href="/chat">WebSockets</a>
+        <a href="/users">useQuery</a>
+        <a href="/stream-demo">Streaming</a>
         <a href="/ssr-example?name=John">Data Loader</a>
         <a
           href="https://github.com/demattosanthony/bunbox"

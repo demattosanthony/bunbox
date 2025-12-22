@@ -3,15 +3,17 @@
  */
 
 import { join } from "path";
-import { scanApiRoutes } from "../scanner";
-import { resolveAbsolutePath } from "../utils";
-import { zodToJsonSchema, isZodSchema, type JSONSchema } from "./zod-to-json-schema";
-import type { RouteMeta } from "../route";
+import {
+  zodToJsonSchema,
+  isZodSchema,
+  type JSONSchema,
+} from "./zod-to-json-schema";
 
 /**
  * OpenAPI configuration options
  */
 export interface OpenAPIConfig {
+  /** Whether OpenAPI is enabled */
   enabled?: boolean;
   /** Base path for docs endpoints (default: '/api/docs') */
   path?: string;
@@ -84,9 +86,15 @@ interface ResponseObject {
   };
 }
 
-/**
- * Handler with OpenAPI metadata attached
- */
+interface RouteMeta {
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  deprecated?: boolean;
+  responses?: Record<string, { description: string }>;
+}
+
 interface HandlerWithMeta {
   __method?: string;
   __meta?: RouteMeta;
@@ -97,11 +105,11 @@ interface HandlerWithMeta {
   };
 }
 
-/**
- * Convert export name to human-readable summary
- * listUsers -> "List users"
- * getUserById -> "Get user by id"
- */
+interface Route {
+  pattern: string;
+  filepath: string;
+}
+
 function exportNameToSummary(name: string): string {
   return name
     .replace(/([A-Z])/g, " $1")
@@ -109,10 +117,6 @@ function exportNameToSummary(name: string): string {
     .trim();
 }
 
-/**
- * Infer tags from route path
- * /api/users/[id] -> ['users']
- */
 function inferTags(path: string): string[] {
   const segment = path
     .replace(/^\/api\//, "")
@@ -122,26 +126,21 @@ function inferTags(path: string): string[] {
   return segment ? [segment] : [];
 }
 
-/**
- * Convert Bunbox route pattern to OpenAPI path
- * /api/users/[id] -> /api/users/{id}
- */
 function toOpenAPIPath(routePath: string): string {
   return routePath.replace(/\[([^\]]+)\]/g, "{$1}");
 }
 
-/**
- * Extract path parameters from route pattern
- * /api/users/[id]/posts/[postId] -> [{name: 'id'}, {name: 'postId'}]
- */
-function extractPathParams(routePath: string, paramsSchema?: unknown): Parameter[] {
+function extractPathParams(
+  routePath: string,
+  paramsSchema?: unknown
+): Parameter[] {
   const matches = routePath.match(/\[([^\]]+)\]/g) || [];
   const paramNames = matches.map((m) => m.slice(1, -1));
 
-  // Try to get schema for each param from paramsSchema
-  const paramsJsonSchema = paramsSchema && isZodSchema(paramsSchema)
-    ? zodToJsonSchema(paramsSchema)
-    : null;
+  const paramsJsonSchema =
+    paramsSchema && isZodSchema(paramsSchema)
+      ? zodToJsonSchema(paramsSchema)
+      : null;
 
   return paramNames.map((name) => ({
     name,
@@ -151,9 +150,6 @@ function extractPathParams(routePath: string, paramsSchema?: unknown): Parameter
   }));
 }
 
-/**
- * Build query parameters from schema
- */
 function buildQueryParams(querySchema?: unknown): Parameter[] {
   if (!querySchema || !isZodSchema(querySchema)) {
     return [];
@@ -181,9 +177,6 @@ type HandlerInfo = {
   schemas?: { params?: unknown; query?: unknown; body?: unknown };
 };
 
-/**
- * Extract handlers with metadata from a module
- */
 function extractHandlers(module: Record<string, unknown>): HandlerInfo[] {
   const handlers: HandlerInfo[] = [];
 
@@ -202,6 +195,25 @@ function extractHandlers(module: Record<string, unknown>): HandlerInfo[] {
   }
 
   return handlers;
+}
+
+/**
+ * Scan API routes from app directory
+ */
+async function scanApiRoutes(appDir: string): Promise<Route[]> {
+  const glob = new Bun.Glob("**/api/**/route.{ts,tsx,js,jsx}");
+  const routes: Route[] = [];
+
+  for await (const filepath of glob.scan({ cwd: appDir })) {
+    const pattern =
+      "/" +
+      filepath
+        .replace(/\/route\.(ts|tsx|js|jsx)$/, "")
+        .replace(/\[([^\]]+)\]/g, ":$1");
+    routes.push({ pattern, filepath });
+  }
+
+  return routes;
 }
 
 /**
@@ -225,11 +237,11 @@ export async function generateOpenAPISpec(
   };
 
   for (const route of apiRoutes) {
-    // Build absolute path to route file (same pattern as server.ts)
     const filePath = join(appDir, route.filepath);
-    const absolutePath = resolveAbsolutePath(filePath);
+    const absolutePath = filePath.startsWith("/")
+      ? filePath
+      : join(process.cwd(), filePath);
 
-    // Dynamic import the route module
     let module: Record<string, unknown>;
     try {
       module = await import(absolutePath);
@@ -238,21 +250,17 @@ export async function generateOpenAPISpec(
       continue;
     }
 
-    // Extract handlers from module
     const handlers = extractHandlers(module);
     if (handlers.length === 0) continue;
 
-    // Build route path in Bunbox format for helper functions
-    const bunboxPath = "/" + route.filepath.replace(/\/route\.(ts|tsx|js|jsx)$/, "");
-    // Convert to OpenAPI format for the spec
+    const bunboxPath =
+      "/" + route.filepath.replace(/\/route\.(ts|tsx|js|jsx)$/, "");
     const openApiPath = toOpenAPIPath(bunboxPath);
 
-    // Initialize path item
     if (!spec.paths[openApiPath]) {
       spec.paths[openApiPath] = {};
     }
 
-    // Add each handler as an operation
     for (const { exportName, method, meta, schemas } of handlers) {
       const operation: Operation = {
         operationId: meta?.operationId || exportName,
@@ -277,8 +285,11 @@ export async function generateOpenAPISpec(
         },
       };
 
-      // Add request body for POST, PUT, PATCH
-      if (["POST", "PUT", "PATCH"].includes(method) && schemas?.body && isZodSchema(schemas.body)) {
+      if (
+        ["POST", "PUT", "PATCH"].includes(method) &&
+        schemas?.body &&
+        isZodSchema(schemas.body)
+      ) {
         operation.requestBody = {
           required: true,
           content: {
@@ -289,16 +300,30 @@ export async function generateOpenAPISpec(
         };
       }
 
-      // Remove empty parameters array
       if (operation.parameters?.length === 0) {
         delete operation.parameters;
       }
 
-      // Add to path item
       const methodKey = method.toLowerCase() as keyof PathItem;
       spec.paths[openApiPath][methodKey] = operation;
     }
   }
 
   return spec;
+}
+
+/**
+ * Write OpenAPI spec to file
+ */
+export async function writeOpenAPISpec(
+  appDir: string,
+  config?: OpenAPIConfig
+): Promise<string> {
+  const spec = await generateOpenAPISpec(appDir, config);
+  const outputDir = join(process.cwd(), ".bunbox");
+  const outputPath = join(outputDir, "openapi.json");
+
+  await Bun.write(outputPath, JSON.stringify(spec, null, 2));
+
+  return outputPath;
 }

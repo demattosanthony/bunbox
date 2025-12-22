@@ -31,7 +31,10 @@ export function createOpenAPIHandler(appDir: string, config?: OpenAPIConfig) {
  * Create a handler that serves Swagger UI
  * Loads Swagger UI from CDN - zero runtime dependencies
  */
-export function createSwaggerUIHandler(specPath: string, config?: OpenAPIConfig) {
+export function createSwaggerUIHandler(
+  specPath: string,
+  config?: OpenAPIConfig
+) {
   const title = config?.title || "API Documentation";
 
   const html = `<!DOCTYPE html>

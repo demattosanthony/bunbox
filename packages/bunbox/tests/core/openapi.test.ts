@@ -1,8 +1,8 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { join } from "path";
 import { mkdir, rm } from "fs/promises";
-import { zodToJsonSchema, isZodSchema } from "../../src/core/openapi/zod-to-json-schema";
-import { generateOpenAPISpec } from "../../src/core/openapi/generator";
+import { zodToJsonSchema, isZodSchema } from "../../src/openapi/zod-to-json-schema";
+import { generateOpenAPISpec } from "../../src/openapi/generator";
 
 // Mock Zod schemas for testing
 const mockZodString = () => ({
