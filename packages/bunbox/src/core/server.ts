@@ -268,7 +268,7 @@ class BunboxServer {
       // Load WebSocket handlers in production
       if (!this.config.development) {
         for (const route of this.wsRoutes) {
-          const path = join(this.config.wsDir, route.filepath);
+          const path = join(this.config.appDir, route.filepath);
           const handler = await dynamicImport<WsRouteModule>(
             resolveAbsolutePath(path),
             false
@@ -536,8 +536,8 @@ class BunboxServer {
           filesToScan.push(join(this.config.appDir, route.filepath));
         }
 
-        // Find all CSS files imported across layouts and pages
-        const cssFiles = await findAllCssFiles(filesToScan);
+        // Find all CSS files imported across layouts, pages, and their components
+        const cssFiles = await findAllCssFiles(filesToScan, this.config.appDir);
 
         if (cssFiles.length === 0) {
           return new Response("/* No CSS files found */", {
@@ -1400,7 +1400,7 @@ class BunboxServer {
 
       const handler = this.config.development
         ? await dynamicImport<WsRouteModule>(
-            resolveAbsolutePath(join(this.config.wsDir, route.filepath)),
+            resolveAbsolutePath(join(this.config.appDir, route.filepath)),
             true
           )
         : this.wsHandlers.get(route.filepath);
@@ -1408,10 +1408,15 @@ class BunboxServer {
 
       const topic = getTopicFromRoute(route.filepath);
 
-      // Check for custom upgrade logic
+      // Check for custom upgrade logic and capture any custom data
+      let customData: unknown = undefined;
       if (handler.upgrade) {
         const upgradeResult = await handler.upgrade(req);
         if (upgradeResult === false) continue;
+        // If upgrade returns an object with data, extract it
+        if (upgradeResult && typeof upgradeResult === "object" && "data" in upgradeResult) {
+          customData = upgradeResult.data;
+        }
       }
 
       // Create context and upgrade connection
@@ -1422,6 +1427,7 @@ class BunboxServer {
         topic,
         handler,
         ctx,
+        data: customData,
       };
 
       if (server.upgrade(req, { data: wsData })) return;

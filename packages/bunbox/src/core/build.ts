@@ -140,8 +140,8 @@ export async function buildForProduction(
     filesToScan.push(join(config.appDir, route.filepath));
   }
 
-  // Find all CSS files imported across layouts and pages
-  const cssFiles = await findAllCssFiles(filesToScan);
+  // Find all CSS files imported across layouts, pages, and their components
+  const cssFiles = await findAllCssFiles(filesToScan, config.appDir);
   let stylesHash = "";
 
   if (cssFiles.length > 0) {

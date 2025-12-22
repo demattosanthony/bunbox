@@ -219,6 +219,8 @@ export type WebSocketData =
       topic: string;
       handler: WsRouteModule;
       ctx: WebSocketContext;
+      /** Custom data from upgrade function */
+      data?: unknown;
     }
   | {
       type: "socket";

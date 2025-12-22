@@ -1,6 +1,6 @@
 {
   "name": "@ademattos/bunbox",
-  "version": "0.3.4",
+  "version": "0.3.9",
   "description": "A simple full-stack framework built on Bun - 100x simpler than Next.js",
   "author": "Anthony Demattos <demattosanthony@gmail.com>",
   "license": "MIT",

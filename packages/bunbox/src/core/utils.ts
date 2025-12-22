@@ -98,7 +98,9 @@ async function processAssetFile(
   const cwd = process.cwd();
   const resolvedPath = resolve(filePath);
   if (!resolvedPath.startsWith(cwd + "/") && resolvedPath !== cwd) {
-    console.error(`[bunbox] Security: Asset path outside project directory: ${filePath}`);
+    console.error(
+      `[bunbox] Security: Asset path outside project directory: ${filePath}`
+    );
     return undefined;
   }
 
@@ -106,7 +108,11 @@ async function processAssetFile(
   if (!ASSET_EXTENSIONS.includes(ext)) return undefined;
 
   const hash = generateHash(filePath);
-  const basename = filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || "asset";
+  const basename =
+    filePath
+      .split("/")
+      .pop()
+      ?.replace(/\.[^.]+$/, "") || "asset";
   const filename = `${basename}.${hash}.${ext}`;
 
   const assetsDir = join(cwd, ".bunbox", "assets");
@@ -353,17 +359,29 @@ export async function loadBunPlugins(): Promise<BunPlugin[]> {
 
 /**
  * Extract CSS imports from a file's content
- * Matches: import "./styles.css", import '../parent.css', import("./app.css"), import from "./module.css"
+ * Matches:
+ * - Relative: import "./styles.css", import '../parent.css'
+ * - Package: import "@xterm/xterm/css/xterm.css", import "some-package/styles.css"
  */
-function extractCssImports(content: string): string[] {
-  // Match any string literal containing a relative CSS import (starts with . or ..)
-  const cssImportRegex = /["'](\.[^"']*\.css)["']/g;
-  const imports: string[] = [];
+function extractCssImports(
+  content: string
+): { path: string; isPackage: boolean }[] {
+  // Match any import statement or string literal containing a .css file
+  // This catches: import "x.css", import("x.css"), from "x.css", require("x.css")
+  const cssImportRegex = /["']([^"']+\.css)["']/g;
+  const imports: { path: string; isPackage: boolean }[] = [];
   let match;
 
   while ((match = cssImportRegex.exec(content)) !== null) {
     if (match[1]) {
-      imports.push(match[1]);
+      const importPath = match[1];
+      // Check if it's a relative path or a package path
+      const isRelative =
+        importPath.startsWith("./") || importPath.startsWith("../");
+      imports.push({
+        path: importPath,
+        isPackage: !isRelative,
+      });
     }
   }
 
@@ -371,31 +389,209 @@ function extractCssImports(content: string): string[] {
 }
 
 /**
- * Find all CSS files imported across layouts and pages
- * Scans provided files for CSS imports and returns unique list of absolute paths
+ * Extract JS/TS imports from a file's content for recursive scanning
+ * Matches relative imports and @/ alias imports (not node_modules packages)
+ */
+function extractJsImports(
+  content: string
+): { path: string; isAlias: boolean }[] {
+  // Match imports: import X from "./file", import "./file", export X from "./file"
+  // Also match @/ alias imports
+  const importRegex =
+    /(?:import|export)\s+(?:[\w{},*\s]+\s+from\s+)?["']([^"']+)["']/g;
+  const imports: { path: string; isAlias: boolean }[] = [];
+  let match;
+
+  while ((match = importRegex.exec(content)) !== null) {
+    if (match[1]) {
+      const importPath = match[1];
+
+      // Skip node_modules packages (don't start with . or @/)
+      // But include @/ alias imports
+      if (importPath.startsWith("./") || importPath.startsWith("../")) {
+        imports.push({ path: importPath, isAlias: false });
+      } else if (importPath.startsWith("@/")) {
+        imports.push({ path: importPath, isAlias: true });
+      }
+      // Skip other imports (node_modules packages like "react", "@radix-ui/xxx", etc.)
+    }
+  }
+
+  return imports;
+}
+
+/**
+ * Resolve a file path, trying common extensions if needed
+ */
+async function resolveFilePath(basePath: string): Promise<string | null> {
+  // If it already has an extension and exists, use it
+  if (await fileExists(basePath)) {
+    return basePath;
+  }
+
+  // Try common extensions
+  const extensions = [".tsx", ".ts", ".jsx", ".js"];
+  for (const ext of extensions) {
+    const pathWithExt = basePath + ext;
+    if (await fileExists(pathWithExt)) {
+      return pathWithExt;
+    }
+  }
+
+  // Try index files
+  for (const ext of extensions) {
+    const indexPath = join(basePath, `index${ext}`);
+    if (await fileExists(indexPath)) {
+      return indexPath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Find node_modules directories by walking up from cwd
+ * Returns array of paths to check, in order of priority
+ */
+function findNodeModulesPaths(): string[] {
+  const paths: string[] = [];
+  let dir = process.cwd();
+  const root = join(dir, "..");
+
+  while (dir !== root) {
+    paths.push(join(dir, "node_modules"));
+    const parent = join(dir, "..");
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return paths;
+}
+
+/**
+ * Resolve a package CSS import to an absolute path
+ * Handles packages with exports field that don't explicitly export CSS
+ */
+async function resolvePackageCss(packagePath: string): Promise<string | null> {
+  // First, try require.resolve (works for packages that export their CSS)
+  try {
+    const requireFromCwd = createRequire(join(process.cwd(), "package.json"));
+    const resolved = requireFromCwd.resolve(packagePath);
+    if (await fileExists(resolved)) {
+      return resolved;
+    }
+  } catch {
+    // require.resolve failed, try manual resolution
+  }
+
+  // Manual resolution: look in node_modules directories
+  // This handles packages that use exports field without explicit CSS exports
+  const nodeModulesPaths = findNodeModulesPaths();
+
+  for (const nodeModulesPath of nodeModulesPaths) {
+    // Handle scoped packages (@org/package) and regular packages
+    const fullPath = join(nodeModulesPath, packagePath);
+
+    if (await fileExists(fullPath)) {
+      return fullPath;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve @/ alias path by trying common base directories
+ * Most projects configure @/ to map to project root or src/
+ */
+async function resolveAliasPath(aliasPath: string): Promise<string | null> {
+  const cwd = process.cwd();
+
+  // Common locations for @/ alias in order of priority:
+  // 1. Project root (most common: @/ -> ./)
+  // 2. src directory (@/ -> ./src/)
+  // 3. app directory (@/ -> ./app/)
+  const baseDirs = [cwd, join(cwd, "src"), join(cwd, "app")];
+
+  for (const baseDir of baseDirs) {
+    const resolved = await resolveFilePath(join(baseDir, aliasPath));
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Find all CSS files imported across the app
+ * Recursively scans provided files and their imports for CSS
+ * Handles both relative and package (node_modules) CSS imports
+ *
+ * @param filesToScan - Initial files to scan (layouts/pages)
+ * @param appDir - The app directory (used for context, not alias resolution)
  */
 export async function findAllCssFiles(
-  filesToScan: string[]
+  filesToScan: string[],
+  _appDir?: string
 ): Promise<string[]> {
   const cssFiles = new Set<string>();
+  const scannedFiles = new Set<string>();
+  const filesToProcess = [...filesToScan];
 
-  for (const filePath of filesToScan) {
+  while (filesToProcess.length > 0) {
+    const filePath = filesToProcess.pop()!;
+
+    // Skip if already scanned
+    if (scannedFiles.has(filePath)) continue;
+    scannedFiles.add(filePath);
+
     if (!(await fileExists(filePath))) continue;
 
     try {
       const content = await Bun.file(filePath).text();
-      const imports = extractCssImports(content);
+      const fileDir = join(filePath, "..");
 
-      for (const importPath of imports) {
-        // Resolve relative to the file doing the import
-        const fileDir = join(filePath, "..");
-        const absoluteCssPath = resolve(fileDir, importPath);
+      // Extract CSS imports
+      const cssImports = extractCssImports(content);
+      for (const cssImport of cssImports) {
+        let absoluteCssPath: string | null = null;
 
-        if (await fileExists(absoluteCssPath)) {
+        if (cssImport.isPackage) {
+          // Resolve package import (e.g., @xterm/xterm/css/xterm.css)
+          absoluteCssPath = await resolvePackageCss(cssImport.path);
+        } else {
+          // Resolve relative import
+          absoluteCssPath = resolve(fileDir, cssImport.path);
+          if (!(await fileExists(absoluteCssPath))) {
+            absoluteCssPath = null;
+          }
+        }
+
+        if (absoluteCssPath) {
           cssFiles.add(absoluteCssPath);
         }
       }
-    } catch (error) {
+
+      // Extract JS/TS imports and add them to the scan queue
+      const jsImports = extractJsImports(content);
+      for (const jsImport of jsImports) {
+        let resolvedPath: string | null = null;
+
+        if (jsImport.isAlias) {
+          // Resolve @/ alias - try project root, src/, and app/ directories
+          const aliasPath = jsImport.path.replace(/^@\//, "");
+          resolvedPath = await resolveAliasPath(aliasPath);
+        } else {
+          // Resolve relative import
+          resolvedPath = await resolveFilePath(resolve(fileDir, jsImport.path));
+        }
+
+        if (resolvedPath && !scannedFiles.has(resolvedPath)) {
+          filesToProcess.push(resolvedPath);
+        }
+      }
+    } catch {
       // Skip files that can't be read
     }
   }
