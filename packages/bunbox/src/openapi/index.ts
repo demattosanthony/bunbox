@@ -2,21 +2,6 @@
  * Bunbox OpenAPI Plugin
  *
  * Provides OpenAPI/Swagger documentation for your Bunbox API routes.
- *
- * @example
- * ```typescript
- * // bunbox.config.ts
- * import { openapi } from "@ademattos/bunbox-openapi";
- *
- * export default defineConfig({
- *   plugins: [
- *     openapi({
- *       title: "My API",
- *       version: "1.0.0",
- *     }),
- *   ],
- * });
- * ```
  */
 
 export {
@@ -46,18 +31,6 @@ export interface OpenAPIPluginOptions extends OpenAPIConfig {
  * OpenAPI plugin for Bunbox
  *
  * Adds automatic OpenAPI spec generation and Swagger UI to your Bunbox app.
- *
- * @example
- * ```typescript
- * import { openapi } from "@ademattos/bunbox-openapi";
- *
- * // In your server setup or config
- * const openapiPlugin = openapi({
- *   title: "My API",
- *   version: "1.0.0",
- *   description: "My awesome API",
- * });
- * ```
  */
 export function openapi(options: OpenAPIPluginOptions = {}) {
   const basePath = options.path || "/api/docs";

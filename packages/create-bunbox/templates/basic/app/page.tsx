@@ -19,7 +19,9 @@ export default function Home() {
 
       <div className="details">
         <p>Built with React, TypeScript, and Bun</p>
-        <p>Edit <code>app/page.tsx</code> to get started</p>
+        <p>
+          Edit <code>app/page.tsx</code> to get started
+        </p>
       </div>
     </div>
   );

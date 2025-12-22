@@ -39,7 +39,7 @@ import {
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl } from "./server/contexts";
-import { openapi, type OpenAPIPlugin } from "@ademattos/bunbox-openapi";
+import { openapi, type OpenAPIPlugin } from "../openapi";
 import type { BunFile, Server } from "bun";
 import type {
   Route,

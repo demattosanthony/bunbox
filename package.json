@@ -17,7 +17,9 @@
   "scripts": {
     "dev:basic": " cd examples/basic && bun run dev",
     "dev:www": "bun run --filter @bunbox/www dev",
-    "typecheck": "bun run --filter '*' typecheck"
+    "typecheck": "bun run --filter '*' typecheck",
+    "build": "bun run --filter '*' build",
+    "clean": "bun run --filter '*' clean"
   },
   "dependencies": {
     "react": "^19.2.0",

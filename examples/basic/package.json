@@ -7,16 +7,19 @@
     "dev": "bunbox dev",
     "build": "bunbox build",
     "start": "bunbox start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf node_modules && rm -rf .bunbox"
   },
   "dependencies": {
     "@ademattos/bunbox": "workspace:*",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "typescript": "^5"
   }
 }
