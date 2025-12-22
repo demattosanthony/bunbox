@@ -487,12 +487,10 @@ export const listUsers = route
           port: 8080,
           appDir: APP_DIR,
           wsDir: join(APP_DIR, "ws"),
-          socketsDir: join(APP_DIR, "sockets"),
           publicDir: join(TEST_DIR, "public"),
           maxBodySize: 1024 * 1024,
           development: false,
           cors: null,
-          openapi: null,
         });
 
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
