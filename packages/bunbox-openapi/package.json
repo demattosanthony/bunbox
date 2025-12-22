@@ -1,0 +1,44 @@
+{
+  "name": "@ademattos/bunbox-openapi",
+  "version": "0.1.0",
+  "description": "OpenAPI/Swagger documentation plugin for Bunbox",
+  "author": "Anthony Demattos <demattosanthony@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/demattosanthony/bunbox.git",
+    "directory": "packages/bunbox-openapi"
+  },
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "bunbox",
+    "openapi",
+    "swagger",
+    "api",
+    "documentation"
+  ],
+  "peerDependencies": {
+    "@ademattos/bunbox": ">=0.3.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}
