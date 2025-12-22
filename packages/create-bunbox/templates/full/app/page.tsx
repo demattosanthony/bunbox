@@ -16,7 +16,6 @@ export default function Home() {
       >
         <a href="/about">About</a>
         <a href="/stream-demo">Streaming Demo</a>
-        <a href="/chat">WebSockets</a>
         <a href="/api/health">Health API</a>
         <a
           href="https://github.com/demattosanthony/bunbox"
