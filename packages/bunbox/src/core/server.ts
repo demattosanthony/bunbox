@@ -39,6 +39,7 @@ import {
 } from "./utils";
 import { getApplicableLayoutPaths } from "./shared";
 import { WebSocketContextImpl } from "./server/contexts";
+import { openapi, type OpenAPIPlugin } from "@ademattos/bunbox-openapi";
 import type { BunFile, Server } from "bun";
 import type {
   Route,
@@ -182,9 +183,15 @@ class BunboxServer {
   private watcher: { close: () => void } | null = null;
   private server: Server<WebSocketData> | null = null;
   private buildMetadata: BuildMetadata | null = null;
+  private openapiPlugin: OpenAPIPlugin | null = null;
 
   constructor(config: ResolvedBunboxConfig) {
     this.config = config;
+
+    // Initialize OpenAPI plugin if configured
+    if (config.openapi) {
+      this.openapiPlugin = openapi(config.openapi);
+    }
   }
 
   /**
@@ -630,6 +637,16 @@ class BunboxServer {
       // Development mode: use fixed names with no-cache
       routes["/__bunbox/client.js"] = this.buildClientRoute();
       routes["/__bunbox/styles.css"] = this.buildStylesRoute();
+    }
+
+    // Build OpenAPI routes if configured
+    if (this.openapiPlugin) {
+      const openapiRoutes = this.openapiPlugin.getRoutes(this.config.appDir);
+      for (const route of openapiRoutes) {
+        routes[route.path] = {
+          GET: async () => route.handler(),
+        };
+      }
     }
 
     const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;

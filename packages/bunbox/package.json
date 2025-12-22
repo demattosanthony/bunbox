@@ -58,6 +58,7 @@
     "routing"
   ],
   "dependencies": {
+    "@ademattos/bunbox-openapi": "workspace:*",
     "bun": "^1.3.2"
   },
   "devDependencies": {

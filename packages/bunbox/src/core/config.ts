@@ -22,6 +22,24 @@ export interface CorsConfig {
   maxAge?: number;
 }
 
+/**
+ * OpenAPI configuration options
+ */
+export interface OpenAPIConfig {
+  /** Whether OpenAPI is enabled */
+  enabled?: boolean;
+  /** Base path for docs endpoints (default: '/api/docs') */
+  path?: string;
+  /** API title */
+  title?: string;
+  /** API version */
+  version?: string;
+  /** API description */
+  description?: string;
+  /** Server URLs */
+  servers?: Array<{ url: string; description?: string }>;
+}
+
 export interface BunboxConfig {
   port?: number;
   hostname?: string;
@@ -32,6 +50,8 @@ export interface BunboxConfig {
   maxBodySize?: number;
   /** CORS configuration. Set to true for permissive defaults, or configure specific options */
   cors?: CorsConfig | boolean;
+  /** OpenAPI/Swagger documentation configuration */
+  openapi?: OpenAPIConfig;
 }
 
 /**
@@ -55,6 +75,7 @@ export interface ResolvedBunboxConfig {
   maxBodySize: number;
   development: boolean;
   cors: ResolvedCorsConfig | null;
+  openapi: OpenAPIConfig | null;
 }
 
 /**
@@ -90,7 +111,7 @@ function resolveCorsConfig(
 /**
  * Default configuration
  */
-const defaults: Omit<ResolvedBunboxConfig, "cors"> = {
+const defaults: Omit<ResolvedBunboxConfig, "cors" | "openapi"> = {
   port: 3000,
   hostname: "localhost",
   appDir: join(process.cwd(), "app"),
@@ -129,6 +150,8 @@ export async function resolveConfig(
   const fileConfig = await loadConfigFile();
   const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
 
+  const openapi = cliConfig.openapi ?? fileConfig.openapi ?? null;
+
   return {
     // Priority: CLI > env var (for deployment) > config file > defaults
     port: cliConfig.port ?? envPort ?? fileConfig.port ?? defaults.port,
@@ -141,5 +164,6 @@ export async function resolveConfig(
       cliConfig.maxBodySize ?? fileConfig.maxBodySize ?? defaults.maxBodySize,
     development,
     cors: resolveCorsConfig(cliConfig.cors ?? fileConfig.cors),
+    openapi: openapi?.enabled ? openapi : null,
   };
 }

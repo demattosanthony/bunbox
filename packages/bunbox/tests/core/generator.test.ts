@@ -491,6 +491,7 @@ export const listUsers = route
           maxBodySize: 1024 * 1024,
           development: false,
           cors: null,
+          openapi: null,
         });
 
         const apiClientFile = Bun.file(join(BUNBOX_DIR, "api-client.ts"));
