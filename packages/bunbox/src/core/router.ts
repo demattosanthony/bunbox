@@ -8,7 +8,7 @@ import type { Route, RouteMatch } from "./types";
  * Route type transformation configuration
  */
 const ROUTE_TRANSFORMS: Record<
-  "page" | "api" | "ws" | "socket",
+  "page" | "api" | "ws",
   { prefix: RegExp; replacement: string; suffix: RegExp }
 > = {
   page: {
@@ -26,11 +26,6 @@ const ROUTE_TRANSFORMS: Record<
     replacement: "/ws",
     suffix: /\/route\.(tsx|ts|jsx|js)$/,
   },
-  socket: {
-    prefix: /^sockets/,
-    replacement: "/sockets",
-    suffix: /\/route\.(tsx|ts|jsx|js)$/,
-  },
 };
 
 /**
@@ -38,7 +33,7 @@ const ROUTE_TRANSFORMS: Record<
  */
 function transformFilePath(
   filePath: string,
-  type: "page" | "api" | "ws" | "socket"
+  type: "page" | "api" | "ws"
 ): string {
   // Special case for root page
   if (type === "page" && filePath.match(/^page\.(tsx|ts|jsx|js)$/)) {
@@ -55,11 +50,11 @@ function transformFilePath(
  * Convert file path to route pattern
  * /app/blog/[slug]/page.tsx -> /blog/:slug
  * /app/api/users/[id]/route.ts -> /api/users/:id
- * /sockets/chat/[room]/route.ts -> /sockets/chat/:room
+ * /ws/chat/[room]/route.ts -> /ws/chat/:room
  */
 export function filePathToRoute(
   filePath: string,
-  type: "page" | "api" | "ws" | "socket"
+  type: "page" | "api" | "ws"
 ): Route {
   let routePath = transformFilePath(filePath, type);
 

@@ -54,7 +54,7 @@ async function scanFiles(dir: string, patterns: string[]): Promise<string[]> {
 async function scanRoutes(
   dir: string,
   patterns: string[],
-  type: "page" | "api" | "ws" | "socket",
+  type: "page" | "api" | "ws",
   pathPrefix?: string,
   excludePrefixes?: string[]
 ): Promise<Route[]> {
@@ -97,13 +97,6 @@ export async function scanWsRoutes(wsDir: string): Promise<Route[]> {
 }
 
 /**
- * Scan for socket routes in sockets/ directory
- */
-export async function scanSocketRoutes(socketsDir: string): Promise<Route[]> {
-  return scanRoutes(socketsDir, ROUTE_PATTERNS, "socket", "sockets");
-}
-
-/**
  * Scan for layout files
  */
 export async function scanLayouts(
@@ -139,56 +132,4 @@ export async function scanMiddleware(
   }
 
   return middleware;
-}
-
-/**
- * Scan for worker file (worker.ts) in app directory
- */
-export async function scanWorker(appDir: string): Promise<string | null> {
-  const patterns = ["worker.ts", "worker.tsx", "worker.js", "worker.jsx"];
-
-  for (const pattern of patterns) {
-    const workerPath = join(appDir, pattern);
-    try {
-      const file = Bun.file(workerPath);
-      if (await file.exists()) {
-        return pattern;
-      }
-    } catch {
-      // File doesn't exist, continue
-    }
-  }
-
-  return null;
-}
-
-const JOB_PATTERNS = [
-  "**/*.ts",
-  "**/*.tsx",
-  "**/*.js",
-  "**/*.jsx",
-];
-
-/**
- * Scan for job files in app/jobs/ directory
- * Returns array of job file paths relative to the jobs directory
- */
-export async function scanJobs(appDir: string): Promise<string[]> {
-  const jobsDir = join(appDir, "jobs");
-  const jobs: string[] = [];
-
-  try {
-    const dirExists = await Bun.file(jobsDir).exists().catch(() => false);
-    // Check if jobs directory exists by trying to scan it
-    for (const pattern of JOB_PATTERNS) {
-      const glob = new Bun.Glob(pattern);
-      const entries = await Array.fromAsync(glob.scan({ cwd: jobsDir }));
-      jobs.push(...entries);
-    }
-  } catch {
-    // Directory doesn't exist, return empty array
-  }
-
-  // Return unique entries (in case of duplicates from multiple patterns)
-  return [...new Set(jobs)];
 }

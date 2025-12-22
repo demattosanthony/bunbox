@@ -67,53 +67,18 @@ if (command === "build") {
 const development = command === "dev";
 const config = await resolveConfig(cliConfig, development);
 
-// Print header first
+// Print header
 console.log("");
 console.log("   📦 Bunbox");
-
-// Build server config (this will initialize and determine worker-only mode)
-const serverConfig = await buildServerConfig(config);
-
-// Print mode-specific info
-if (serverConfig.workerOnly) {
-  console.log("   - Mode:    Worker");
-} else {
-  console.log(`   - Local:   http://${config.hostname}:${config.port}`);
-}
-
+console.log(`   - Local:   http://${config.hostname}:${config.port}`);
 console.log("");
 console.log(" ○ Starting...");
 
-// Print ready message after initialization
+// Build server config
+const serverConfig = await buildServerConfig(config);
+
+// Print ready message
 console.log(serverConfig.readyMessage);
 
-// Start server or keep process alive for worker-only mode
-if (serverConfig.workerOnly) {
-  // Worker-only mode: don't start HTTP server
-  // Keep process alive by preventing it from exiting
-  // Workers should maintain their own resources (sockets, intervals, etc.)
-  // which naturally keep the process alive
-  process.stdin.resume();
-
-  // Also set up signal handlers for graceful shutdown
-  const shutdown = async () => {
-    if (serverConfig.workerCleanup) {
-      await serverConfig.workerCleanup();
-    }
-    process.exit(0);
-  };
-
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-  process.on("SIGQUIT", shutdown);
-} else {
-  // Normal mode: start HTTP server
-  // This MUST be at top level for Bun's --hot to work properly
-  const server = Bun.serve(serverConfig);
-
-  // Start worker after server is listening (both dev and production)
-  // Bun.serve() returns synchronously once the server is listening
-  if (serverConfig.startWorkerAfterListen) {
-    await serverConfig.startWorkerAfterListen();
-  }
-}
+// Start HTTP server
+Bun.serve(serverConfig);

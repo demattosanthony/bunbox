@@ -63,12 +63,6 @@ describe("router", () => {
       expect(route.paramNames).toEqual(["id"]);
     });
 
-    test("converts socket route", () => {
-      const route = filePathToRoute("sockets/chat/route.ts", "socket");
-      expect(route.pattern.test("/sockets/chat")).toBe(true);
-      expect(route.type).toBe("socket");
-    });
-
     test("converts WebSocket route", () => {
       const route = filePathToRoute("ws/chat/route.ts", "ws");
       expect(route.pattern.test("/ws/chat")).toBe(true);
@@ -344,11 +338,6 @@ describe("router", () => {
     test("converts root page route", () => {
       const route = filePathToRoute("page.tsx", "page");
       expect(toBunRoutePath(route)).toBe("/");
-    });
-
-    test("converts socket route to Bun path", () => {
-      const route = filePathToRoute("sockets/chat/route.ts", "socket");
-      expect(toBunRoutePath(route)).toBe("/sockets/chat");
     });
 
     test("converts WebSocket route to Bun path", () => {

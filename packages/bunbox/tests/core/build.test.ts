@@ -66,7 +66,7 @@ describe("Build Metadata", () => {
         routes: {
           pages: 5,
           apis: 3,
-          sockets: 1,
+          ws: 1,
           layouts: 2,
         },
         bundleSize: 12345,
@@ -78,7 +78,7 @@ describe("Build Metadata", () => {
       expect(validMetadata.version).toBe("0.1.0");
       expect(validMetadata.routes.pages).toBe(5);
       expect(validMetadata.routes.apis).toBe(3);
-      expect(validMetadata.routes.sockets).toBe(1);
+      expect(validMetadata.routes.ws).toBe(1);
       expect(validMetadata.routes.layouts).toBe(2);
       expect(validMetadata.bundleSize).toBe(12345);
       expect(validMetadata.clientHash).toBe("abc12345");

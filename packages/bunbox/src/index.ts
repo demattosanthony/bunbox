@@ -23,7 +23,6 @@ export type {
   BunboxConfig,
   ResolvedBunboxConfig,
   CorsConfig,
-  OpenAPIConfig,
 } from "./core/config";
 
 export {
@@ -47,20 +46,10 @@ export type {
   MiddlewareContext,
   MiddlewareResult,
   MiddlewareModule,
-  SocketUser,
-  SocketMessage,
-  SocketContext,
-  SocketRouteModule,
   StreamingResponse,
   SSEResponse,
-  JobConfig,
   LoaderContext,
 } from "./core/types";
-
-export { defineJob, jobs } from "./core/jobs";
-
-export { defineProtocol } from "./client/protocol";
-export type { Protocol } from "./client/protocol";
 
 export { json, error, route, stream, sse, defineMiddleware } from "./core/route";
 export type { HttpMethod, BeforeHook, AfterHook, RouteMeta } from "./core/route";
@@ -87,12 +76,3 @@ export {
   createSetCookie,
 } from "./core/middleware";
 export type { CookieOptions } from "./core/middleware";
-
-// OpenAPI generation utilities
-export {
-  generateOpenAPISpec,
-  writeOpenAPISpec,
-  zodToJsonSchema,
-  isZodSchema,
-} from "./core/openapi";
-export type { OpenAPISpec, JSONSchema } from "./core/openapi";
